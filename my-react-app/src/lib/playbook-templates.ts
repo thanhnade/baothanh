@@ -78,16 +78,21 @@ const templates: Record<string, string> = {
           - "Node {{ inventory_hostname }} has been reset cleanly (data only deleted)."`,
 
   "01-update-hosts-hostname": `---
-- name: Update /etc/hosts and verify hostname for entire cluster
+- name: Set unique hostname and update /etc/hosts for Kubernetes cluster
   hosts: all
   become: yes
-  gather_fact: yes
+  gather_facts: yes
 
   tasks:
-    - name: Add all inventory nodes to /etc/hosts using inventory hostname
+    - name: Set hostname = inventory hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+      tags: sethostname
+
+    - name: Update /etc/hosts with all cluster nodes
       lineinfile:
         path: /etc/hosts
-        line: "{{ hostvars[item].ansible_host }} {{ item }}"
+        line: "{{ hostvars[item].ansible_default_ipv4.address | default(hostvars[item].ansible_host) }} {{ item }}"
         state: present
         create: yes
         insertafter: EOF
@@ -95,13 +100,13 @@ const templates: Record<string, string> = {
       when: hostvars[item].ansible_host is defined
       tags: addhosts
 
-    - name: Verify hostname on node
+    - name: Verify hostname
       command: hostname
       register: hostname_result
       changed_when: false
       tags: verify
 
-    - name: Display hostname info
+    - name: Show hostname result
       debug:
         msg:
           - "Inventory hostname: {{ inventory_hostname }}"

@@ -898,7 +898,7 @@ export function Clusters() {
                 </TabsTrigger>
                 <TabsTrigger value="configuration" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  Cấu hình
+                  K8S Roles
                 </TabsTrigger>
               </TabsList>
 
@@ -1011,7 +1011,7 @@ export function Clusters() {
                       Vai trò của server trong hệ thống
                     </p>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 hidden">
                     <Label htmlFor="edit-serverStatus" className="text-sm font-medium">
                       Server Status <span className="text-destructive">*</span>
                     </Label>

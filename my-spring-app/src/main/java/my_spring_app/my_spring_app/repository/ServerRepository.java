@@ -24,6 +24,9 @@ public interface ServerRepository extends JpaRepository<ServerEntity, Long> {
     // Eager load SSH keys để tránh LazyInitializationException
     @Query("SELECT s FROM ServerEntity s LEFT JOIN FETCH s.sshKey")
     List<ServerEntity> findAllWithSshKeys();
+
+    // Đếm số lượng server theo role
+    long countByRole(String role);
 }
 
 

@@ -34,6 +34,14 @@ export function Servers() {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [selectedServerForTerminal, setSelectedServerForTerminal] = useState<Server | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Role limits: MASTER, DOCKER, ANSIBLE chỉ được 1 server, WORKER không giới hạn
+  const ROLE_LIMITS = {
+    MASTER: 1,
+    DOCKER: 1,
+    ANSIBLE: 1,
+    WORKER: Infinity
+  };
   
   // Form state để lưu giá trị khi chuyển tab
   const [formData, setFormData] = useState({
@@ -63,6 +71,43 @@ export function Servers() {
   const currentPageIndex = Math.min(Math.max(currentPage, 1), totalPages);
   const startIndex = (currentPageIndex - 1) * pageSize;
   const displayServers = filteredServers.slice(startIndex, startIndex + pageSize);
+
+  // Tính toán số lượng server theo role hiện tại
+  const roleCounts = servers.reduce((acc, server) => {
+    if (server.role) {
+      acc[server.role] = (acc[server.role] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Kiểm tra role có available không (chưa đạt giới hạn)
+  const isRoleAvailable = (role: string) => {
+    const limit = ROLE_LIMITS[role as keyof typeof ROLE_LIMITS] ?? Infinity;
+    const currentCount = roleCounts[role] || 0;
+
+    // Khi edit server, nếu đang edit server có role này thì vẫn cho phép chọn lại
+    if (editingServer && editingServer.role === role) {
+      return true;
+    }
+
+    return currentCount < limit;
+  };
+
+  // Lấy thông tin giới hạn cho role
+  const getRoleLimitInfo = (role: string) => {
+    const limit = ROLE_LIMITS[role as keyof typeof ROLE_LIMITS] ?? Infinity;
+    const currentCount = roleCounts[role] || 0;
+
+    if (limit === Infinity) {
+      return { limit: "∞", current: currentCount, available: true };
+    }
+
+    return {
+      limit,
+      current: currentCount,
+      available: isRoleAvailable(role)
+    };
+  };
 
   useEffect(() => {
     // Load danh sách servers và kiểm tra status khi vào trang
@@ -972,7 +1017,7 @@ export function Servers() {
                 </TabsTrigger>
                 <TabsTrigger value="configuration" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  Cấu hình
+                  K8S Roles
                 </TabsTrigger>
               </TabsList>
 
@@ -1071,6 +1116,28 @@ export function Servers() {
 
               {/* Tab 2: Cấu hình Host */}
               <TabsContent value="configuration" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-1">
+                {/* Thông báo giới hạn role */}
+                {Object.entries(ROLE_LIMITS).some(([role, limit]) => limit !== Infinity && !isRoleAvailable(role)) && (
+                  <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                      <strong>Giới hạn số lượng server:</strong>
+                      <ul className="mt-1 ml-4 space-y-1">
+                        {["MASTER", "DOCKER", "ANSIBLE"].map(role => {
+                          const info = getRoleLimitInfo(role);
+                          if (info.limit !== Infinity && !info.available) {
+                            return (
+                              <li key={role}>
+                                • {role}: Đã có {info.current}/{info.limit} server (đã đạt giới hạn)
+                              </li>
+                            );
+                          }
+                          return null;
+                        })}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="role" className="text-sm font-medium">
@@ -1084,16 +1151,40 @@ export function Servers() {
                       className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       required
                     >
-                      <option value="MASTER">MASTER - Master Node</option>
-                      <option value="WORKER">WORKER - Worker Node</option>
-                      <option value="DOCKER">DOCKER - Docker Host</option>
-                      <option value="ANSIBLE">ANSIBLE - Ansible Controller</option>
+                      <option
+                        value="MASTER"
+                        disabled={!isRoleAvailable("MASTER")}
+                        title={!isRoleAvailable("MASTER") ? `Đã đạt giới hạn tối đa 1 Master Node` : "Master Node - Điều khiển cluster Kubernetes"}
+                      >
+                        MASTER - Master Node {getRoleLimitInfo("MASTER").current > 0 && !isRoleAvailable("MASTER") ? "(Đã có)" : ""}
+                      </option>
+                      <option
+                        value="WORKER"
+                        disabled={!isRoleAvailable("WORKER")}
+                        title="Worker Node - Chạy workloads trong cluster Kubernetes"
+                      >
+                        WORKER - Worker Node (Không giới hạn)
+                      </option>
+                      <option
+                        value="DOCKER"
+                        disabled={!isRoleAvailable("DOCKER")}
+                        title={!isRoleAvailable("DOCKER") ? `Đã đạt giới hạn tối đa 1 Docker Host` : "Docker Host - Chạy Docker registry và containers"}
+                      >
+                        DOCKER - Docker Host {getRoleLimitInfo("DOCKER").current > 0 && !isRoleAvailable("DOCKER") ? "(Đã có)" : ""}
+                      </option>
+                      <option
+                        value="ANSIBLE"
+                        disabled={!isRoleAvailable("ANSIBLE")}
+                        title={!isRoleAvailable("ANSIBLE") ? `Đã đạt giới hạn tối đa 1 Ansible Controller` : "Ansible Controller - Quản lý automation và deployment"}
+                      >
+                        ANSIBLE - Ansible Controller {getRoleLimitInfo("ANSIBLE").current > 0 && !isRoleAvailable("ANSIBLE") ? "(Đã có)" : ""}
+                      </option>
                     </select>
                     <p className="text-xs text-muted-foreground">
                       Vai trò của host trong hệ thống
                     </p>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 hidden">
                     <Label htmlFor="serverStatus" className="text-sm font-medium">
                       Host Status <span className="text-destructive">*</span>
                     </Label>
@@ -1115,7 +1206,6 @@ export function Servers() {
                     </p>
               </div>
             </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="clusterStatus" className="text-sm font-medium">
                     Cluster Status <span className="text-destructive">*</span>

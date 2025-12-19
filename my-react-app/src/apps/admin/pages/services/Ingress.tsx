@@ -509,7 +509,7 @@ export function IngressList() {
                   <Textarea
                     value={ingressDetail.yaml || ""}
                     readOnly
-                    className="font-mono text-xs min-h-[400px]"
+                    className="font-mono text-xs min-h-[300px]"
                   />
                 </TabsContent>
                 <TabsContent value="metadata" className="space-y-4">
@@ -574,7 +574,7 @@ export function IngressList() {
               <Textarea
                 value={yamlEditContent}
                 onChange={(e) => setYamlEditContent(e.target.value)}
-                className="flex-1 font-mono text-xs min-h-[500px]"
+                className="flex-1 font-mono text-xs min-h-[300px] resize-y"
                 placeholder="YAML content..."
               />
               <div className="flex justify-end gap-2">

@@ -78,7 +78,7 @@ public class ServerServiceImpl implements ServerService {
     public ServerResponse findById(Long id) {
         System.out.println("[findById] Tim server voi ID: " + id);
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         return convertToResponse(server);
     }
 
@@ -87,10 +87,11 @@ public class ServerServiceImpl implements ServerService {
      * Khi thêm server, hệ thống sẽ:
      * 1. Test SSH connection trước
      * 2. Kiểm tra duplicate
-     * 3. Lưu server vào database
-     * 4. Tự động generate SSH key và install vào server
-     * 5. Configure sudo NOPASSWD cho user
-     * 
+     * 3. Kiểm tra giới hạn số lượng server theo role (1 MASTER, 1 DOCKER, 1 ANSIBLE)
+     * 4. Lưu server vào database
+     * 5. Tự động generate SSH key và install vào server
+     * 6. Configure sudo NOPASSWD cho user
+     *
      * @param request Thông tin request để tạo server
      * @return Response chứa thông tin server đã tạo
      * @throws RuntimeException Nếu có lỗi trong quá trình tạo server
@@ -98,43 +99,48 @@ public class ServerServiceImpl implements ServerService {
     @Override
     public CreateServerResponse createServer(CreateServerRequest request) {
         System.out.println("[createServer] Bat dau tao server moi voi name: " + request.getName());
-        
+
         // Bước 1: Test SSH connection trước
         System.out.println("[createServer] Buoc 1: Test SSH connection...");
-        boolean canSsh = testSshConnection(request.getIp(), request.getPort(), 
+        boolean canSsh = testSshConnection(request.getIp(), request.getPort(),
                                            request.getUsername(), request.getPassword());
         if (!canSsh) {
-            throw new RuntimeException("Khong the ket noi SSH toi server. Vui long kiem tra IP/Port/Username/Password");
+            throw new RuntimeException("Không thể kết nối SSH tới server. Vui lòng kiểm tra IP/Port/Username/Password");
         }
         System.out.println("[createServer] SSH connection thanh cong");
-        
+
         // Set status = ONLINE nếu SSH connection thành công
         ServerEntity.ServerStatus status = ServerEntity.ServerStatus.ONLINE;
-        
+
         // Bước 2: Kiểm tra duplicate
         System.out.println("[createServer] Buoc 2: Kiem tra duplicate server...");
         if (serverRepository.existsByIpAndPortAndUsername(request.getIp(), request.getPort(), request.getUsername())) {
-            throw new RuntimeException("Server da ton tai voi IP/Port/Username nay. Vui long su dung thong tin khac.");
+            throw new RuntimeException("Server đã tồn tại với IP/Port/Username này. Vui lòng sử dụng thông tin khác.");
         }
         System.out.println("[createServer] Khong co duplicate");
-        
+
         // Validate role (MASTER, WORKER, DOCKER, ANSIBLE)
         System.out.println("[createServer] Kiem tra role: " + request.getRole());
         String role = request.getRole().toUpperCase();
-        if (!"MASTER".equals(role) && !"WORKER".equals(role) && 
+        if (!"MASTER".equals(role) && !"WORKER".equals(role) &&
             !"DOCKER".equals(role) && !"ANSIBLE".equals(role)) {
-            System.err.println("[createServer] Loi: Role khong hop le: " + role);
-            throw new RuntimeException("Role khong hop le. Chi ho tro MASTER, WORKER, DOCKER, ANSIBLE");
+            System.err.println("[createServer] Lỗi: Role không hợp lệ: " + role);
+            throw new RuntimeException("Role không hợp lệ. Chỉ hỗ trợ MASTER, WORKER, DOCKER, ANSIBLE");
         }
         System.out.println("[createServer] Role hop le: " + role);
+
+        // Bước 3: Kiểm tra giới hạn số lượng server theo role
+        System.out.println("[createServer] Buoc 3: Kiem tra gioi han so luong server theo role...");
+        validateRoleLimit(role);
+        System.out.println("[createServer] Role " + role + " con trong gioi han cho phep");
 
         // Validate server status (RUNNING, STOPPED, BUILDING, ERROR)
         System.out.println("[createServer] Kiem tra server status: " + request.getServerStatus());
         String serverStatus = request.getServerStatus().toUpperCase();
         if (!"RUNNING".equals(serverStatus) && !"STOPPED".equals(serverStatus) && 
             !"BUILDING".equals(serverStatus) && !"ERROR".equals(serverStatus)) {
-            System.err.println("[createServer] Loi: Server status khong hop le: " + serverStatus);
-            throw new RuntimeException("Server status khong hop le. Chi ho tro RUNNING, STOPPED, BUILDING, ERROR");
+            System.err.println("[createServer] Lỗi: Server status không hợp lệ: " + serverStatus);
+            throw new RuntimeException("Server status không hợp lệ. Chỉ hỗ trợ RUNNING, STOPPED, BUILDING, ERROR");
         }
         System.out.println("[createServer] Server status hop le: " + serverStatus);
 
@@ -142,8 +148,8 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[createServer] Kiem tra cluster status: " + request.getClusterStatus());
         String clusterStatus = request.getClusterStatus().toUpperCase();
         if (!"AVAILABLE".equals(clusterStatus) && !"UNAVAILABLE".equals(clusterStatus)) {
-            System.err.println("[createServer] Loi: Cluster status khong hop le: " + clusterStatus);
-            throw new RuntimeException("Cluster status khong hop le. Chi ho tro AVAILABLE, UNAVAILABLE");
+            System.err.println("[createServer] Lỗi: Cluster status không hợp lệ: " + clusterStatus);
+            throw new RuntimeException("Cluster status không hợp lệ. Chỉ hỗ trợ AVAILABLE, UNAVAILABLE");
         }
         System.out.println("[createServer] Cluster status hop le: " + clusterStatus);
 
@@ -276,7 +282,7 @@ public class ServerServiceImpl implements ServerService {
         
         // Tìm server trong database
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // Kiểm tra xem có thay đổi thông tin kết nối không
         boolean connectionFieldChanged = request.getIp() != null || request.getPort() != null || request.getUsername() != null;
@@ -300,7 +306,7 @@ public class ServerServiceImpl implements ServerService {
             if (serverRepository.existsByIpAndPortAndUsername(newIp, newPort, newUsername)) {
                 Optional<ServerEntity> existingServer = serverRepository.findByIpAndPortAndUsername(newIp, newPort, newUsername);
                 if (existingServer.isPresent() && !existingServer.get().getId().equals(id)) {
-                    throw new RuntimeException("Server da ton tai voi IP/Port/Username nay. Vui long su dung thong tin khac.");
+                    throw new RuntimeException("Server đã tồn tại với IP/Port/Username này. Vui lòng sử dụng thông tin khác.");
                 }
             }
         }
@@ -320,8 +326,8 @@ public class ServerServiceImpl implements ServerService {
             boolean canSsh = testSshConnection(testIp, testPort, testUsername, testPassword);
             if (!canSsh) {
                 System.err.println("[updateServer] SSH test THAT BAI - KHONG cho phep update");
-                throw new RuntimeException("Khong the ket noi SSH toi server voi thong tin moi. " +
-                        "Vui long kiem tra lai IP/Port/Username/Password. Update bi huy bo.");
+                throw new RuntimeException("Không thể kết nối SSH tới server với thông tin mới. " +
+                        "Vui lòng kiểm tra lại IP/Port/Username/Password. Update bị hủy bỏ.");
             }
             
             // SSH thành công → cho phép update và set status = ONLINE
@@ -350,10 +356,16 @@ public class ServerServiceImpl implements ServerService {
         }
         if (request.getRole() != null && !request.getRole().isBlank()) {
             String role = request.getRole().toUpperCase();
-            if (!"MASTER".equals(role) && !"WORKER".equals(role) && 
+            if (!"MASTER".equals(role) && !"WORKER".equals(role) &&
                 !"DOCKER".equals(role) && !"ANSIBLE".equals(role)) {
-                throw new RuntimeException("Role khong hop le. Chi ho tro MASTER, WORKER, DOCKER, ANSIBLE");
+                throw new RuntimeException("Role không hợp lệ. Chỉ hỗ trợ MASTER, WORKER, DOCKER, ANSIBLE");
             }
+
+            // Kiểm tra giới hạn số lượng server theo role (chỉ khi role thực sự thay đổi)
+            if (!role.equals(server.getRole())) {
+                validateRoleLimit(role);
+            }
+
             server.setRole(role);
         }
         // Chỉ cập nhật status nếu được cung cấp và chưa test SSH
@@ -361,7 +373,7 @@ public class ServerServiceImpl implements ServerService {
             String statusStr = request.getStatus().toUpperCase();
             if (!"ONLINE".equals(statusStr) && !"OFFLINE".equals(statusStr) && 
                 !"DISABLED".equals(statusStr)) {
-                throw new RuntimeException("Status khong hop le. Chi ho tro ONLINE, OFFLINE, DISABLED");
+                throw new RuntimeException("Status không hợp lệ. Chỉ hỗ trợ ONLINE, OFFLINE, DISABLED");
             }
             server.setStatus(ServerEntity.ServerStatus.valueOf(statusStr));
         }
@@ -369,14 +381,14 @@ public class ServerServiceImpl implements ServerService {
             String serverStatus = request.getServerStatus().toUpperCase();
             if (!"RUNNING".equals(serverStatus) && !"STOPPED".equals(serverStatus) && 
                 !"BUILDING".equals(serverStatus) && !"ERROR".equals(serverStatus)) {
-                throw new RuntimeException("Server status khong hop le. Chi ho tro RUNNING, STOPPED, BUILDING, ERROR");
+                throw new RuntimeException("Server status không hợp lệ. Chỉ hỗ trợ RUNNING, STOPPED, BUILDING, ERROR");
             }
             server.setServerStatus(serverStatus);
         }
         if (request.getClusterStatus() != null && !request.getClusterStatus().isBlank()) {
             String clusterStatus = request.getClusterStatus().toUpperCase();
             if (!"AVAILABLE".equals(clusterStatus) && !"UNAVAILABLE".equals(clusterStatus)) {
-                throw new RuntimeException("Cluster status khong hop le. Chi ho tro AVAILABLE, UNAVAILABLE");
+                throw new RuntimeException("Cluster status không hợp lệ. Chỉ hỗ trợ AVAILABLE, UNAVAILABLE");
             }
             // Format log với username và IP
             String username = server.getUsername() != null ? server.getUsername() : (server.getName() != null ? server.getName() : "server-" + server.getId());
@@ -420,7 +432,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[deleteServer] Bat dau xoa server voi ID: " + id);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // 1) Xóa tất cả SSH keys gắn với server qua ssh_keys.server_id
         try {
@@ -1299,7 +1311,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[updateServerStatus] Cap nhat status server ID: " + id + " thanh: " + status);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         server.setStatus(status);
         ServerEntity updatedServer = serverRepository.save(server);
@@ -1673,7 +1685,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[reconnectServer] Bat dau reconnect server ID: " + id);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         boolean hadSshKeyBefore = server.getSshKey() != null;
         
@@ -1741,7 +1753,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[disconnectServer] Bat dau disconnect server ID: " + id);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // Set status = DISABLED
         server.setStatus(ServerEntity.ServerStatus.DISABLED);
@@ -1757,7 +1769,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[execCommand] Command: " + command);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // Kiem tra server status
         if (server.getStatus() == ServerEntity.ServerStatus.DISABLED) {
@@ -1832,7 +1844,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[execCommand with outputHandler] Command: " + command);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // Kiem tra server status
         if (server.getStatus() == ServerEntity.ServerStatus.DISABLED) {
@@ -1876,7 +1888,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[shutdownServer] Bat dau shutdown server ID: " + id);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // Kiem tra server status
         if (server.getStatus() == ServerEntity.ServerStatus.DISABLED) {
@@ -1905,7 +1917,7 @@ public class ServerServiceImpl implements ServerService {
         System.out.println("[restartServer] Bat dau restart server ID: " + id);
         
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         // Kiem tra server status
         if (server.getStatus() == ServerEntity.ServerStatus.DISABLED) {
@@ -1931,7 +1943,7 @@ public class ServerServiceImpl implements ServerService {
     @Override
     public boolean pingServer(Long id, int timeoutMs) {
         ServerEntity server = serverRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
         
         String ip = server.getIp();
         Integer port = server.getPort() != null ? server.getPort() : 22;
@@ -1953,7 +1965,7 @@ public class ServerServiceImpl implements ServerService {
         
         try {
             ServerEntity server = serverRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Khong tim thay server voi ID: " + id));
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy server với ID: " + id));
             
             String ip = server.getIp();
             Integer port = server.getPort() != null ? server.getPort() : 22;
@@ -2022,7 +2034,41 @@ public class ServerServiceImpl implements ServerService {
         
         return response;
     }
-    
+
+    /**
+     * Validate giới hạn số lượng server theo role
+     * - MASTER: tối đa 1 server
+     * - DOCKER: tối đa 1 server
+     * - ANSIBLE: tối đa 1 server
+     * - WORKER: không giới hạn
+     *
+     * @param role Role cần kiểm tra
+     * @throws RuntimeException Nếu vượt quá giới hạn cho phép
+     */
+    private void validateRoleLimit(String role) {
+        // WORKER không có giới hạn
+        if ("WORKER".equals(role)) {
+            return;
+        }
+
+        // Đếm số lượng server hiện tại với role tương ứng
+        long currentCount = serverRepository.countByRole(role);
+        System.out.println("[validateRoleLimit] Role " + role + " hien co " + currentCount + " server");
+
+        // Kiểm tra giới hạn
+        if (("MASTER".equals(role) || "DOCKER".equals(role) || "ANSIBLE".equals(role)) && currentCount >= 1) {
+            String roleName = switch (role) {
+                case "MASTER" -> "Master Node";
+                case "DOCKER" -> "Docker Host";
+                case "ANSIBLE" -> "Ansible Controller";
+                default -> role;
+            };
+            throw new RuntimeException("Hệ thống chỉ cho phép có tối đa 1 " + roleName + ". " +
+                    "Hiện tại đã có " + currentCount + " server với role " + roleName + ". " +
+                    "Vui lòng chọn role khác hoặc xóa server cũ trước khi tạo mới.");
+        }
+    }
+
 }
 
 

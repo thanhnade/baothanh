@@ -701,9 +701,9 @@ export function Pods() {
                     placeholder="apiVersion: v1&#10;kind: Pod&#10;metadata:..."
                     value={yamlContent}
                     onChange={(e) => setYamlContent(e.target.value)}
-                    className="flex-1 font-mono text-xs min-h-[400px]"
+                    className="flex-1 font-mono text-xs min-h-[200px] resize-y"
                   />
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-4 border-t mt-4">
                     <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
                       Hủy
                     </Button>
@@ -1213,7 +1213,7 @@ export function Pods() {
               <Textarea
                 value={yamlEditContent}
                 onChange={(e) => setYamlEditContent(e.target.value)}
-                className="flex-1 font-mono text-xs min-h-[500px]"
+                className="flex-1 font-mono text-xs min-h-[300px] resize-y"
                 placeholder="YAML content..."
               />
               <div className="flex justify-end gap-2">

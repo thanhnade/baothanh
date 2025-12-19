@@ -3,6 +3,39 @@
  */
 
 /**
+ * Validate tên namespace theo Kubernetes rules
+ * - Chỉ chứa chữ thường, số và dấu gạch nối
+ * - Phải bắt đầu và kết thúc bằng chữ hoặc số
+ * - Độ dài từ 1 đến 63 ký tự
+ */
+export const validateNamespaceName = (name: string): { valid: boolean; message?: string } => {
+  if (!name || name.trim() === "") {
+    return { valid: false, message: "Tên namespace không được để trống" };
+  }
+
+  const trimmedName = name.trim();
+
+  if (trimmedName.length < 1 || trimmedName.length > 63) {
+    return {
+      valid: false,
+      message: "Tên namespace phải có độ dài từ 1 đến 63 ký tự",
+    };
+  }
+
+  // Regex: bắt đầu bằng chữ/số, chứa chữ/số/dấu gạch nối, kết thúc bằng chữ/số
+  const namespaceRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+  if (!namespaceRegex.test(trimmedName)) {
+    return {
+      valid: false,
+      message: "Tên namespace chỉ được chứa chữ thường, số và dấu gạch nối, phải bắt đầu và kết thúc bằng chữ hoặc số",
+    };
+  }
+
+  return { valid: true };
+};
+
+/**
  * Validate DNS theo RFC 1035
  * Cho phép dấu chấm (.) để phân tách các label
  */

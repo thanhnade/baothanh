@@ -2033,7 +2033,7 @@ export function ClusterSetupAmd() {
     const success = await executePlaybookStep(
       "13-setup-storage.yml",
       "setup-storage",
-      "Thiết lập Storage (NFS)",
+      "Thiết lập Storage (Local Storage)",
       setK8sTab3Steps,
       addK8sTab3Log
     );
@@ -2078,7 +2078,7 @@ export function ClusterSetupAmd() {
         { filename: "10-install-metrics-server.yml", stepId: "install-metrics", label: "Cài đặt Metrics Server" },
         { filename: "11-install-ingress.yml", stepId: "install-ingress", label: "Cài đặt Nginx Ingress" },
         { filename: "12-install-metallb.yml", stepId: "install-metallb", label: "Cài đặt MetalLB LoadBalancer" },
-        { filename: "13-setup-storage.yml", stepId: "setup-storage", label: "Thiết lập Storage (NFS)" },
+        { filename: "13-setup-storage.yml", stepId: "setup-storage", label: "Thiết lập Storage (Local Storage)" },
       ];
 
       // Thực thi từng playbook tuần tự
@@ -2423,6 +2423,93 @@ export function ClusterSetupAmd() {
     }
   };
 
+  // Function để update chỉ một playbook cụ thể trong danh sách (hiệu quả hơn)
+  const updatePlaybookInList = async (filename: string, action: 'save' | 'upload' | 'create') => {
+    if (!ansibleStatus?.controllerHost) {
+      toast.error("Không tìm thấy controller host.");
+      return false;
+    }
+
+    try {
+      // Tạo một "fake" playbook object với thông tin cơ bản để update UI
+      let updatedPlaybook: { name: string; content: string; size?: number };
+
+      if (action === 'save') {
+        // Đối với save, chúng ta đã biết content từ editor
+        updatedPlaybook = {
+          name: filename,
+          content: playbookContent,
+          size: new Blob([playbookContent]).size
+        };
+      } else if (action === 'upload') {
+        // Đối với upload, chúng ta cần đọc content từ file (đã được set trong state)
+        updatedPlaybook = {
+          name: filename,
+          content: playbookContent,
+          size: new Blob([playbookContent]).size
+        };
+      } else if (action === 'create') {
+        // Đối với create từ template, content đã được set
+        updatedPlaybook = {
+          name: filename,
+          content: playbookContent,
+          size: new Blob([playbookContent]).size
+        };
+      } else {
+        return false;
+      }
+
+      // Update playbook trong danh sách hiện tại
+      setPlaybooks(prevPlaybooks => {
+        const existingIndex = prevPlaybooks.findIndex(pb => pb.name === filename);
+
+        if (existingIndex >= 0) {
+          // Update existing playbook
+          const updatedPlaybooks = [...prevPlaybooks];
+          updatedPlaybooks[existingIndex] = updatedPlaybook;
+          return updatedPlaybooks;
+        } else {
+          // Add new playbook to list
+          return [...prevPlaybooks, updatedPlaybook];
+        }
+      });
+
+      // Update selection nếu cần
+      setSelectedPlaybook(filename);
+      setPlaybookFilename(filename.replace(/\.ya?ml$/i, ""));
+
+      return true;
+    } catch (error) {
+      console.error("Error updating playbook in list:", error);
+      return false;
+    }
+  };
+
+  // Function để remove một playbook khỏi danh sách
+  const removePlaybookFromList = (filename: string) => {
+    setPlaybooks(prevPlaybooks => prevPlaybooks.filter(pb => pb.name !== filename));
+
+    // Nếu playbook đang được chọn bị xóa, chọn playbook khác
+    if (selectedPlaybook === filename) {
+      setPlaybooks(currentPlaybooks => {
+        if (currentPlaybooks.length > 1) {
+          // Chọn playbook đầu tiên khác
+          const remaining = currentPlaybooks.filter(pb => pb.name !== filename);
+          const nextSelection = remaining[0];
+          setSelectedPlaybook(nextSelection.name);
+          setPlaybookFilename(nextSelection.name.replace(/\.ya?ml$/i, ""));
+          setPlaybookContent(nextSelection.content);
+        } else {
+          // Không còn playbook nào
+          setSelectedPlaybook(null);
+          setPlaybookFilename("");
+          setPlaybookContent("");
+        }
+        return currentPlaybooks.filter(pb => pb.name !== filename);
+      });
+    }
+  };
+
   const handleSavePlaybook = async () => {
     const trimmedName = playbookFilename.trim();
     if (!trimmedName) {
@@ -2456,8 +2543,13 @@ export function ClusterSetupAmd() {
       }
 
       toast.success(result.message || `Đã lưu playbook ${filename}`);
-      setSelectedPlaybook(filename);
-      await loadPlaybooks(filename);
+
+      // Update chỉ file cụ thể thay vì tải lại toàn bộ danh sách
+      const updated = await updatePlaybookInList(filename, 'save');
+      if (!updated) {
+        // Fallback: tải lại toàn bộ nếu update local thất bại
+        await loadPlaybooks(filename);
+      }
     } catch (error: any) {
       const errorMessage = error.message || "Không thể lưu playbook";
       toast.error(errorMessage);
@@ -2493,8 +2585,11 @@ export function ClusterSetupAmd() {
         throw new Error(result.error || result.message || "Không thể xóa playbook");
       }
 
-      toast.success(result.message || `Đã xóa playbook ${selectedPlaybook}`);
-      await loadPlaybooks();
+      const deletedPlaybookName = selectedPlaybook;
+      toast.success(result.message || `Đã xóa playbook ${deletedPlaybookName}`);
+
+      // Remove chỉ file cụ thể khỏi danh sách thay vì tải lại toàn bộ
+      removePlaybookFromList(deletedPlaybookName);
     } catch (error: any) {
       const errorMessage = error.message || "Không thể xóa playbook";
       toast.error(errorMessage);
@@ -2679,9 +2774,16 @@ export function ClusterSetupAmd() {
       const filenameWithoutExt = file.name.replace(/\.ya?ml$/i, "");
       setPlaybookFilename(filenameWithoutExt);
       setPlaybookContent(content);
-      setSelectedPlaybook(file.name.toLowerCase().endsWith(".yml") ? file.name : `${filenameWithoutExt}.yml`);
+      const finalFilename = file.name.toLowerCase().endsWith(".yml") ? file.name : `${filenameWithoutExt}.yml`;
+      setSelectedPlaybook(finalFilename);
       toast.success(result.message || `Đã tải lên playbook ${file.name}`);
-      await loadPlaybooks(file.name);
+
+      // Update chỉ file cụ thể thay vì tải lại toàn bộ danh sách
+      const updated = await updatePlaybookInList(finalFilename, 'upload');
+      if (!updated) {
+        // Fallback: tải lại toàn bộ nếu update local thất bại
+        await loadPlaybooks(finalFilename);
+      }
     } catch (error: any) {
       toast.error(error.message || "Không thể tải lên playbook");
     } finally {
@@ -2753,7 +2855,13 @@ export function ClusterSetupAmd() {
       setPlaybookContent(template.content);
       setSelectedPlaybook(finalName);
       toast.success(result.message || `Đã tạo playbook ${finalName}`);
-      await loadPlaybooks(finalName);
+
+      // Update chỉ file cụ thể thay vì tải lại toàn bộ danh sách
+      const updated = await updatePlaybookInList(finalName, 'create');
+      if (!updated) {
+        // Fallback: tải lại toàn bộ nếu update local thất bại
+        await loadPlaybooks(finalName);
+      }
     } catch (error: any) {
       toast.error(error.message || "Không thể tạo playbook từ template");
     } finally {
@@ -3474,10 +3582,10 @@ export function ClusterSetupAmd() {
                         <div className="p-1.5 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
                           <BookOpen className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                         </div>
-                        <span className="font-semibold text-base">Quản lý playbook & cài đặt K8s</span>
+                        <span className="font-semibold text-base">Quản lý playbooks</span>
                       </div>
                       <span className="text-xs text-muted-foreground text-left leading-relaxed">
-                        Quản lý playbooks và cài đặt Kubernetes cluster
+                      Quản lý playbooks (Xem, chỉnh sửa và thực thi playbook)
                       </span>
                     </Button>
                   </div>
@@ -3771,7 +3879,7 @@ export function ClusterSetupAmd() {
                         handleUtilityActionClick(
                           "joinExistingWorkers",
                           "14-prepare-and-join-worker.yml",
-                          "Join worker vào cụm hiện có",
+                          "Join worker đã gán nhãn (Cluster Status = Available) vào cụm hiện có",
                           "Chuẩn bị và join thêm worker nodes vào cụm Kubernetes đã vận hành."
                         )
                       }
@@ -3784,7 +3892,7 @@ export function ClusterSetupAmd() {
                         <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg flex-shrink-0">
                           <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                         </div>
-                        <span className="font-semibold text-base break-words">Join worker vào cụm</span>
+                        <span className="font-semibold text-base break-words">Join workers vào cụm</span>
                       </div>
                       {renderUtilityStatus(utilityActionsStatus.joinExistingWorkers)}
                     </Button>
@@ -3896,19 +4004,43 @@ export function ClusterSetupAmd() {
                 <div className="text-gray-500">Đang khởi tạo...</div>
               ) : (
                 currentExecutingStep?.logs.map((log, index) => {
-                  const isError = log.includes("❌") || log.toLowerCase().includes("lỗi") || log.toLowerCase().includes("error") || log.toLowerCase().includes("failed");
-                  const isSuccess = log.includes("✅") || log.includes("🎉") || log.includes("Hoàn tất") || log.toLowerCase().includes("success");
-                  const isStep = log.includes("▶️") || log.includes("Bắt đầu");
-                  
+                  // Ưu tiên check emoji trước (chính xác nhất)
+                  const hasErrorEmoji = log.includes("❌");
+                  const hasSuccessEmoji = log.includes("✅") || log.includes("🎉");
+                  const hasStepEmoji = log.includes("▶️");
+
+                  // Kiểm tra context cho từ khóa (để tránh false positive)
+                  const isAnsibleStats = /\w+\s*:\s*ok=\d+\s+changed=\d+\s+unreachable=\d+\s+failed=\d+/.test(log);
+                  const isTaskWithError = log.toLowerCase().includes("task [") && log.toLowerCase().includes("error");
+                  const isDisplayError = log.toLowerCase().includes("display error") || log.toLowerCase().includes("check for error");
+                  const isReportError = log.toLowerCase().includes("report error") && !log.toLowerCase().includes("no error");
+
+                  // Xác định loại log theo thứ tự ưu tiên
+                  let logType: 'error' | 'success' | 'step' | 'normal' = 'normal';
+
+                  if (hasErrorEmoji) {
+                    logType = 'error';
+                  } else if (hasSuccessEmoji) {
+                    logType = 'success';
+                  } else if (hasStepEmoji) {
+                    logType = 'step';
+                  } else if (hasErrorEmoji || isTaskWithError || (log.toLowerCase().includes("error") && !isDisplayError && !isReportError)) {
+                    logType = 'error';
+                  } else if (isAnsibleStats || log.toLowerCase().includes("success") || log.includes("Hoàn tất") || log.toLowerCase().includes("installed") || log.toLowerCase().includes("completed")) {
+                    logType = 'success';
+                  } else if (log.includes("Bắt đầu") || log.toLowerCase().includes("starting") || log.toLowerCase().includes("applying")) {
+                    logType = 'step';
+                  }
+
                   return (
                     <div
                       key={index}
                       className={`mb-1 whitespace-pre-wrap break-words ${
-                        isError
+                        logType === 'error'
                           ? "text-red-400"
-                          : isSuccess
+                          : logType === 'success'
                           ? "text-green-400"
-                          : isStep
+                          : logType === 'step'
                           ? "text-yellow-400 font-semibold"
                           : "text-gray-300"
                       }`}
@@ -4404,7 +4536,7 @@ export function ClusterSetupAmd() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BookOpen className="h-5 w-5" />
-              Quản lý playbook & cài đặt K8s
+              Quản lý playbooks
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4 flex-1 flex flex-col min-h-0">

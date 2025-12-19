@@ -688,11 +688,11 @@ export function Services() {
                   </div>
                   <Textarea
                     placeholder="apiVersion: v1&#10;kind: Service&#10;metadata:..."
-                    className="flex-1 font-mono text-xs min-h-[400px]"
+                    className="flex-1 font-mono text-xs min-h-[200px] resize-y"
                     value={yamlContent}
                     onChange={(e) => setYamlContent(e.target.value)}
                   />
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-4 border-t mt-4">
                     <Button variant="outline" onClick={closeDialog} disabled={isSubmitting}>
                       Hủy
                     </Button>
@@ -850,7 +850,7 @@ export function Services() {
                   <Textarea
                     value={serviceDetail.yaml || ""}
                     readOnly
-                    className="font-mono text-xs min-h-[400px]"
+                    className="font-mono text-xs min-h-[300px]"
                   />
                 </TabsContent>
                 <TabsContent value="metadata" className="space-y-4">
@@ -931,7 +931,7 @@ export function Services() {
               <Textarea
                 value={yamlEditContent}
                 onChange={(e) => setYamlEditContent(e.target.value)}
-                className="flex-1 font-mono text-xs min-h-[500px]"
+                className="flex-1 font-mono text-xs min-h-[300px] resize-y"
                 placeholder="YAML content..."
               />
               <div className="flex justify-end gap-2">

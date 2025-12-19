@@ -462,7 +462,7 @@ export function PVList() {
               <Textarea
                 value={yamlEditContent}
                 onChange={(e) => setYamlEditContent(e.target.value)}
-                className="flex-1 font-mono text-xs min-h-[500px]"
+                className="flex-1 font-mono text-xs min-h-[300px] resize-y"
                 placeholder="YAML content..."
               />
               <div className="flex justify-end gap-2">
@@ -605,9 +605,9 @@ export function PVList() {
                     value={yamlContent}
                     onChange={(e) => setYamlContent(e.target.value)}
                     placeholder="apiVersion: v1&#10;kind: PersistentVolume&#10;metadata:&#10;  name: my-pv&#10;spec:&#10;  capacity:&#10;    storage: 1Gi&#10;  accessModes:&#10;    - ReadWriteOnce&#10;  persistentVolumeReclaimPolicy: Retain"
-                    className="flex-1 font-mono text-xs min-h-[400px]"
+                    className="flex-1 font-mono text-xs min-h-[200px] resize-y"
                   />
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-4 border-t mt-4">
                     <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                       Hủy
                     </Button>
@@ -743,7 +743,7 @@ const DetailDialog = ({
               <Textarea
                 value={detail.yaml || ""}
                 readOnly
-                className="font-mono text-xs min-h-[400px]"
+                className="font-mono text-xs min-h-[300px] resize-y"
               />
             </TabsContent>
 

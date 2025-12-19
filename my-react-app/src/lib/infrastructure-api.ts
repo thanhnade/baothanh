@@ -1130,7 +1130,9 @@ export const infrastructureAPI = {
     error?: string;
   }> => {
     try {
-      const response = await api.get("/install/ansible/config");
+      const response = await api.get("/admin/ansible/config", {
+        params: controllerHost ? { controllerHost } : {}
+      });
       return {
         success: response.data.success !== false,
         controllerHost: response.data.controllerHost,
@@ -1201,7 +1203,7 @@ export const infrastructureAPI = {
     sudoPassword?: string
   ): Promise<{ success: boolean; message: string; error?: string }> => {
     try {
-      const response = await api.post("/install/ansible/config", {
+      const response = await api.post("/admin/ansible/config/save", {
         controllerHost: controllerHost || null,
         ansibleCfg,
         ansibleInventory,
@@ -1229,7 +1231,12 @@ export const infrastructureAPI = {
    */
   updateAnsibleConfig: async (): Promise<{ success: boolean; message?: string; error?: string }> => {
     try {
-      const response = await api.post("/install/ansible/config/regenerate");
+      const response = await api.post("/admin/ansible/config/verify", {
+        controllerHost: null,
+        ansibleCfg: "",
+        ansibleInventory: "",
+        ansibleVars: ""
+      });
       return {
         success: response.data.success !== false,
         message: response.data.message || "Đã cập nhật cấu hình Ansible",

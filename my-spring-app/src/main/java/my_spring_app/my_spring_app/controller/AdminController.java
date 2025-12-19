@@ -52,6 +52,7 @@ import my_spring_app.my_spring_app.dto.request.DeletePlaybookRequest;
 import my_spring_app.my_spring_app.dto.request.ExecutePlaybookRequest;
 import my_spring_app.my_spring_app.dto.request.InstallK8sRequest;
 import my_spring_app.my_spring_app.dto.request.NamespaceRequest;
+import my_spring_app.my_spring_app.dto.request.NamespaceUpdateRequest;
 import my_spring_app.my_spring_app.dto.request.ScaleRequest;
 import my_spring_app.my_spring_app.dto.request.IngressRequest;
 import my_spring_app.my_spring_app.dto.request.DeploymentRequest;
@@ -236,6 +237,14 @@ public class AdminController {
     public ResponseEntity<NamespaceResponse> createNamespaceFromYaml(@RequestBody Map<String, String> request) {
         String yaml = request.get("yamlContent");
         NamespaceResponse response = adminService.createNamespaceFromYaml(yaml);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/cluster/namespaces/{name}")
+    public ResponseEntity<NamespaceResponse> updateNamespace(
+            @PathVariable String name,
+            @Valid @RequestBody NamespaceUpdateRequest request) {
+        NamespaceResponse response = adminService.updateNamespace(name, request);
         return ResponseEntity.ok(response);
     }
 

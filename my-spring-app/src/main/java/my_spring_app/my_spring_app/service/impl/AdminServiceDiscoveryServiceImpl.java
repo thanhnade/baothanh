@@ -284,11 +284,12 @@ public class AdminServiceDiscoveryServiceImpl extends BaseKubernetesService impl
             }
             detail.setStatus(statusInfo);
 
-            // YAML
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(v1Service));
+                String yaml = executeCommand(session, "kubectl get service " + name + " -n " + namespace + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("");
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             return detail;
@@ -602,10 +603,12 @@ public class AdminServiceDiscoveryServiceImpl extends BaseKubernetesService impl
             }
             detail.setEvents(events);
 
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(v1Ingress));
+                String yaml = executeCommand(session, "kubectl get ingress " + name + " -n " + namespace + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("");
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             return detail;

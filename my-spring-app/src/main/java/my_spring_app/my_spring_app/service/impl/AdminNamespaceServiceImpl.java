@@ -5,6 +5,7 @@ import my_spring_app.my_spring_app.dto.reponse.NamespaceDetailResponse;
 import my_spring_app.my_spring_app.dto.reponse.NamespaceListResponse;
 import my_spring_app.my_spring_app.dto.reponse.NamespaceResponse;
 import my_spring_app.my_spring_app.dto.request.NamespaceRequest;
+import my_spring_app.my_spring_app.dto.request.NamespaceUpdateRequest;
 import my_spring_app.my_spring_app.entity.ServerEntity;
 import my_spring_app.my_spring_app.repository.ServerRepository;
 import my_spring_app.my_spring_app.service.AdminNamespaceService;
@@ -87,12 +88,21 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
                         NamespaceResponse namespace = new NamespaceResponse();
                         
                         // Basic info
-                        String name = v1Namespace.getMetadata().getName();
+                        V1ObjectMeta metadata = v1Namespace.getMetadata();
+                        if (metadata == null) {
+                            continue; // Skip this namespace if metadata is null
+                        }
+
+                        String name = metadata.getName();
+                        if (name == null || name.trim().isEmpty()) {
+                            continue; // Skip if name is null or empty
+                        }
+
                         namespace.setId(name);
                         namespace.setName(name);
-                        
+
                         // Age từ creationTimestamp
-                        OffsetDateTime creationTimestamp = v1Namespace.getMetadata().getCreationTimestamp();
+                        OffsetDateTime creationTimestamp = metadata.getCreationTimestamp();
                         namespace.setAge(calculateAge(creationTimestamp));
                         
                         // Status từ status.phase
@@ -242,29 +252,30 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
             NamespaceDetailResponse response = new NamespaceDetailResponse();
             
             // Basic info
-            if (v1Namespace.getMetadata() != null) {
-                response.setName(v1Namespace.getMetadata().getName());
-                response.setUid(v1Namespace.getMetadata().getUid());
-                response.setResourceVersion(v1Namespace.getMetadata().getResourceVersion());
-                
+            V1ObjectMeta metadata = v1Namespace.getMetadata();
+            if (metadata != null) {
+                response.setName(metadata.getName());
+                response.setUid(metadata.getUid());
+                response.setResourceVersion(metadata.getResourceVersion());
+
                 // Creation timestamp
-                OffsetDateTime creationTimestamp = v1Namespace.getMetadata().getCreationTimestamp();
+                OffsetDateTime creationTimestamp = metadata.getCreationTimestamp();
                 if (creationTimestamp != null) {
                     response.setCreationTimestamp(creationTimestamp.toString());
                     response.setAge(calculateAge(creationTimestamp));
                 }
-                
+
                 // Labels
                 Map<String, String> labels = new HashMap<>();
-                if (v1Namespace.getMetadata().getLabels() != null) {
-                    labels.putAll(v1Namespace.getMetadata().getLabels());
+                if (metadata.getLabels() != null) {
+                    labels.putAll(metadata.getLabels());
                 }
                 response.setLabels(labels);
-                
+
                 // Annotations
                 Map<String, String> annotations = new HashMap<>();
-                if (v1Namespace.getMetadata().getAnnotations() != null) {
-                    annotations.putAll(v1Namespace.getMetadata().getAnnotations());
+                if (metadata.getAnnotations() != null) {
+                    annotations.putAll(metadata.getAnnotations());
                 }
                 response.setAnnotations(annotations);
             }
@@ -362,12 +373,12 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
                 response.setMemory("0");
             }
             
-            // Generate YAML
+            // Generate YAML using kubectl (like Rancher)
             try {
-                String yaml = Yaml.dump(v1Namespace);
+                String yaml = executeCommand(session, "kubectl get namespace " + name + " -o yaml", true);
                 response.setYaml(yaml);
             } catch (Exception e) {
-                response.setYaml("# Không thể tạo YAML: " + e.getMessage());
+                response.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
             
             return response;
@@ -403,6 +414,9 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
             metadata.setName(request.getName().trim());
             if (request.getLabels() != null && !request.getLabels().isEmpty()) {
                 metadata.setLabels(request.getLabels());
+            }
+            if (request.getAnnotations() != null && !request.getAnnotations().isEmpty()) {
+                metadata.setAnnotations(request.getAnnotations());
             }
             namespaceBody.setMetadata(metadata);
 
@@ -470,10 +484,12 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
                 throw new RuntimeException("YAML không hợp lệ");
             }
 
-            if (namespaceFromYaml.getMetadata() == null) {
+            V1ObjectMeta yamlMetadata = namespaceFromYaml.getMetadata();
+            if (yamlMetadata == null) {
                 namespaceFromYaml.setMetadata(new V1ObjectMeta());
+                yamlMetadata = namespaceFromYaml.getMetadata();
             }
-            if (!name.equals(namespaceFromYaml.getMetadata().getName())) {
+            if (yamlMetadata.getName() == null || !name.equals(yamlMetadata.getName())) {
                 throw new RuntimeException("Tên trong YAML không khớp với tên namespace");
             }
 
@@ -481,9 +497,10 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
             if (existing == null) {
                 throw new RuntimeException("Namespace không tồn tại");
             }
-            if (existing.getMetadata() != null) {
-                namespaceFromYaml.getMetadata().setResourceVersion(existing.getMetadata().getResourceVersion());
-                namespaceFromYaml.getMetadata().setUid(existing.getMetadata().getUid());
+            V1ObjectMeta existingMetadata = existing.getMetadata();
+            if (existingMetadata != null && yamlMetadata != null) {
+                yamlMetadata.setResourceVersion(existingMetadata.getResourceVersion());
+                yamlMetadata.setUid(existingMetadata.getUid());
             }
 
             io.kubernetes.client.openapi.models.V1Namespace updated = api.replaceNamespace(name, namespaceFromYaml, null, null, null, null);
@@ -492,6 +509,60 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
             throw new RuntimeException("Không thể cập nhật namespace từ YAML: " + e.getResponseBody(), e);
         } catch (Exception e) {
             throw new RuntimeException("Không thể cập nhật namespace từ YAML: " + e.getMessage(), e);
+        } finally {
+            if (session != null && session.isConnected()) {
+                session.disconnect();
+            }
+        }
+    }
+
+    @Override
+    public NamespaceResponse updateNamespace(String name, NamespaceUpdateRequest request) {
+        ServerEntity masterServer = serverRepository.findByRole("MASTER")
+                .orElseThrow(() -> new RuntimeException(
+                        "Không tìm thấy server MASTER. Vui lòng cấu hình server MASTER trong hệ thống."));
+
+        Session session = null;
+        try {
+            session = createSession(masterServer);
+            ApiClient client = createKubernetesClient(session);
+            CoreV1Api api = new CoreV1Api(client);
+
+            // Lấy namespace hiện tại
+            io.kubernetes.client.openapi.models.V1Namespace existing = api.readNamespace(name, null);
+            if (existing == null) {
+                throw new RuntimeException("Namespace không tồn tại");
+            }
+
+            // Tạo namespace object mới với metadata được update
+            V1ObjectMeta updatedMetadata = existing.getMetadata() != null ? existing.getMetadata() : new V1ObjectMeta();
+
+            if (request.getLabels() != null && !request.getLabels().isEmpty()) {
+                updatedMetadata.setLabels(request.getLabels());
+            }
+
+            if (request.getAnnotations() != null && !request.getAnnotations().isEmpty()) {
+                updatedMetadata.setAnnotations(request.getAnnotations());
+            }
+
+            // Tạo namespace object mới
+            io.kubernetes.client.openapi.models.V1Namespace updatedNamespace = new io.kubernetes.client.openapi.models.V1Namespace();
+            updatedNamespace.setMetadata(updatedMetadata);
+            updatedNamespace.setSpec(existing.getSpec()); // Giữ nguyên spec
+            updatedNamespace.setStatus(existing.getStatus()); // Giữ nguyên status
+
+            // Thực hiện replace (update)
+            io.kubernetes.client.openapi.models.V1Namespace updated = api.replaceNamespace(
+                name,
+                updatedNamespace,
+                null, null, null, null
+            );
+
+            return buildNamespaceResponse(updated);
+        } catch (ApiException e) {
+            throw new RuntimeException("Không thể cập nhật namespace: " + e.getResponseBody(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Không thể cập nhật namespace: " + e.getMessage(), e);
         } finally {
             if (session != null && session.isConnected()) {
                 session.disconnect();
@@ -643,14 +714,20 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
      * Build NamespaceResponse từ V1Namespace object.
      */
     private NamespaceResponse buildNamespaceResponse(V1Namespace v1Namespace) {
-        if (v1Namespace == null || v1Namespace.getMetadata() == null) {
+        if (v1Namespace == null) {
             return null;
         }
+
+        V1ObjectMeta metadata = v1Namespace.getMetadata();
+        if (metadata == null) {
+            return null;
+        }
+
         NamespaceResponse namespace = new NamespaceResponse();
-        String name = v1Namespace.getMetadata().getName();
+        String name = metadata.getName();
         namespace.setId(name);
         namespace.setName(name);
-        OffsetDateTime creationTimestamp = v1Namespace.getMetadata().getCreationTimestamp();
+        OffsetDateTime creationTimestamp = metadata.getCreationTimestamp();
         namespace.setAge(calculateAge(creationTimestamp));
         V1NamespaceStatus status = v1Namespace.getStatus();
         String phase = (status != null && status.getPhase() != null)
@@ -658,8 +735,8 @@ public class AdminNamespaceServiceImpl extends BaseKubernetesService implements 
                 : "Active";
         namespace.setStatus("Active".equalsIgnoreCase(phase) ? "active" : "terminating");
         Map<String, String> labels = new HashMap<>();
-        if (v1Namespace.getMetadata().getLabels() != null) {
-            labels.putAll(v1Namespace.getMetadata().getLabels());
+        if (metadata.getLabels() != null) {
+            labels.putAll(metadata.getLabels());
         }
         namespace.setLabels(labels);
         return namespace;

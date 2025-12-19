@@ -289,10 +289,12 @@ public class AdminStorageServiceImpl extends BaseKubernetesService implements Ad
             }
             detail.setEvents(events);
 
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(pvc));
+                String yaml = executeCommand(session, "kubectl get pvc " + name + " -n " + namespace + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("");
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             return detail;
@@ -605,10 +607,12 @@ public class AdminStorageServiceImpl extends BaseKubernetesService implements Ad
             }
             detail.setEvents(events);
 
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(pv));
+                String yaml = executeCommand(session, "kubectl get pv " + name + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("");
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             return detail;

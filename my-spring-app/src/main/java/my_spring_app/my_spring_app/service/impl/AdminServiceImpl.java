@@ -29,6 +29,7 @@ import my_spring_app.my_spring_app.dto.reponse.IngressListResponse;
 import my_spring_app.my_spring_app.dto.reponse.PVCListResponse;
 import my_spring_app.my_spring_app.dto.reponse.PVListResponse;
 import my_spring_app.my_spring_app.dto.request.NamespaceRequest;
+import my_spring_app.my_spring_app.dto.request.NamespaceUpdateRequest;
 import my_spring_app.my_spring_app.entity.ProjectEntity;
 import my_spring_app.my_spring_app.entity.ProjectBackendEntity;
 import my_spring_app.my_spring_app.entity.ProjectDatabaseEntity;
@@ -995,6 +996,11 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
     @Override
     public void deleteDeployment(String namespace, String name) {
         adminWorkloadService.deleteDeployment(namespace, name);
+    }
+
+    @Override
+    public NamespaceResponse updateNamespace(String name, NamespaceUpdateRequest request) {
+        return adminNamespaceService.updateNamespace(name, request);
     }
 
     @Override
@@ -3928,9 +3934,10 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
         // YAML - chỉ lấy nếu includeDetails = true
         if (includeDetails) {
                         try {
-                            node.setYaml(Yaml.dump(v1Node));
+                            String yaml = executeCommand(masterSession, "kubectl get node " + nodeName + " -o yaml", true);
+                            node.setYaml(yaml);
                         } catch (Exception yamlException) {
-                            node.setYaml("");
+                            node.setYaml("# Không thể lấy YAML: " + yamlException.getMessage());
                         }
         } else {
             node.setYaml("");

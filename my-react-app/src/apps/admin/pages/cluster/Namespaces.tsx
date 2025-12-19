@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ResourceTable } from "../../components/ResourceTable";
 import { Badge } from "@/components/ui/badge";
 import { adminAPI } from "@/lib/admin-api";
+import { validateNamespaceName } from "@/lib/validators";
 import type { Namespace, Pod } from "@/types/admin";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -35,8 +36,8 @@ export function Namespaces() {
   const [namespaceDetail, setNamespaceDetail] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [createLabels, setCreateLabels] = useState<Record<string, string>>({});
-  const [createAnnotations, setCreateAnnotations] = useState<Record<string, string>>({});
+  const [createLabelEntries, setCreateLabelEntries] = useState<Array<{ id: string; key: string; value: string }>>([]);
+  const [createAnnotationEntries, setCreateAnnotationEntries] = useState<Array<{ id: string; key: string; value: string }>>([]);
   const [createMode, setCreateMode] = useState<"form" | "yaml">("form");
   const [yamlContent, setYamlContent] = useState("");
   const [yamlEditDialogOpen, setYamlEditDialogOpen] = useState(false);
@@ -89,8 +90,8 @@ export function Namespaces() {
   const handleAdd = () => {
     setIsDialogOpen(true);
     setCreateMode("form");
-    setCreateLabels({});
-    setCreateAnnotations({});
+    setCreateLabelEntries([]);
+    setCreateAnnotationEntries([]);
     setYamlContent("");
   };
 
@@ -98,47 +99,50 @@ export function Namespaces() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const name = (formData.get("name") as string)?.trim();
-    
-    if (!name) {
-      toast.error("Tên namespace không được để trống");
+
+    // Validate namespace name
+    const nameValidation = validateNamespaceName(name);
+    if (!nameValidation.valid) {
+      toast.error(nameValidation.message);
       return;
     }
 
     // Lọc bỏ các labels và annotations có key hoặc value rỗng
     const validLabels = Object.fromEntries(
-      Object.entries(createLabels).filter(([k, v]) => k && v)
+      createLabelEntries
+        .filter(entry => entry.key.trim() && entry.value.trim())
+        .map(entry => [entry.key.trim(), entry.value.trim()])
     );
     const validAnnotations = Object.fromEntries(
-      Object.entries(createAnnotations).filter(([k, v]) => k && v)
+      createAnnotationEntries
+        .filter(entry => entry.key.trim() && entry.value.trim())
+        .map(entry => [entry.key.trim(), entry.value.trim()])
     );
 
     const data = {
       name,
-      status: "active" as const,
-      labels: validLabels,
+      labels: Object.keys(validLabels).length > 0 ? validLabels : undefined,
+      annotations: Object.keys(validAnnotations).length > 0 ? validAnnotations : undefined,
     };
 
     try {
       setIsSubmitting(true);
-      // Tạo namespace mới
+      // Tạo namespace mới với labels và annotations trong một request
       const created = await adminAPI.createNamespace(data);
-      // Nếu có annotations thì cập nhật thêm
-      if (Object.keys(validAnnotations).length > 0) {
-        await adminAPI.updateNamespace(name, {
-          annotations: validAnnotations,
-        });
-      }
 
       // Optimistic update: thêm namespace mới vào danh sách hiện tại
       setNamespaces((prev) => [...prev, created]);
 
       toast.success("Tạo namespace thành công");
       setIsDialogOpen(false);
-      setCreateLabels({});
-      setCreateAnnotations({});
-      loadNamespaces();
-    } catch (error) {
-      toast.error("Không thể tạo namespace");
+      setCreateLabelEntries([]);
+      setCreateAnnotationEntries([]);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error ||
+                          error.message ||
+                          "Không thể tạo namespace";
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -168,50 +172,39 @@ export function Namespaces() {
     }
   };
 
+
   const addCreateLabel = () => {
-    setCreateLabels({ ...createLabels, "": "" });
+    const newId = `label_${Date.now()}_${Math.random()}`;
+    setCreateLabelEntries(prev => [...prev, { id: newId, key: "", value: "" }]);
   };
 
-  const removeCreateLabel = (key: string) => {
-    const newLabels = { ...createLabels };
-    delete newLabels[key];
-    setCreateLabels(newLabels);
+  const removeCreateLabel = (id: string) => {
+    setCreateLabelEntries(prev => prev.filter(entry => entry.id !== id));
   };
 
-  const updateCreateLabel = (oldKey: string, newKey: string, value: string) => {
-    const newLabels = { ...createLabels };
-    if (oldKey !== newKey) {
-      delete newLabels[oldKey];
-    }
-    if (newKey && value) {
-      newLabels[newKey] = value;
-    } else if (!newKey || !value) {
-      delete newLabels[newKey || oldKey];
-    }
-    setCreateLabels(newLabels);
+  const updateCreateLabel = (id: string, field: 'key' | 'value', newValue: string) => {
+    setCreateLabelEntries(prev =>
+      prev.map(entry =>
+        entry.id === id ? { ...entry, [field]: newValue } : entry
+      )
+    );
   };
 
   const addCreateAnnotation = () => {
-    setCreateAnnotations({ ...createAnnotations, "": "" });
+    const newId = `annotation_${Date.now()}_${Math.random()}`;
+    setCreateAnnotationEntries(prev => [...prev, { id: newId, key: "", value: "" }]);
   };
 
-  const removeCreateAnnotation = (key: string) => {
-    const newAnnotations = { ...createAnnotations };
-    delete newAnnotations[key];
-    setCreateAnnotations(newAnnotations);
+  const removeCreateAnnotation = (id: string) => {
+    setCreateAnnotationEntries(prev => prev.filter(entry => entry.id !== id));
   };
 
-  const updateCreateAnnotation = (oldKey: string, newKey: string, value: string) => {
-    const newAnnotations = { ...createAnnotations };
-    if (oldKey !== newKey) {
-      delete newAnnotations[oldKey];
-    }
-    if (newKey && value) {
-      newAnnotations[newKey] = value;
-    } else if (!newKey || !value) {
-      delete newAnnotations[newKey || oldKey];
-    }
-    setCreateAnnotations(newAnnotations);
+  const updateCreateAnnotation = (id: string, field: 'key' | 'value', newValue: string) => {
+    setCreateAnnotationEntries(prev =>
+      prev.map(entry =>
+        entry.id === id ? { ...entry, [field]: newValue } : entry
+      )
+    );
   };
 
   const handleDelete = async (namespace: Namespace) => {
@@ -480,31 +473,31 @@ export function Namespaces() {
                     </Button>
                   </div>
                   <div className="space-y-2">
-                    {Object.entries(createLabels).map(([key, value]) => (
-                      <div key={key} className="flex gap-2">
+                    {createLabelEntries.map((entry) => (
+                      <div key={entry.id} className="flex gap-2">
                         <Input
                           placeholder="Key"
-                          value={key}
-                          onChange={(e) => updateCreateLabel(key, e.target.value, value)}
+                          value={entry.key}
+                          onChange={(e) => updateCreateLabel(entry.id, 'key', e.target.value)}
                           className="flex-1"
                         />
                         <Input
                           placeholder="Value"
-                          value={value}
-                          onChange={(e) => updateCreateLabel(key, key, e.target.value)}
+                          value={entry.value}
+                          onChange={(e) => updateCreateLabel(entry.id, 'value', e.target.value)}
                           className="flex-1"
                         />
                         <Button
                           type="button"
                           variant="outline"
                           size="icon"
-                          onClick={() => removeCreateLabel(key)}
+                          onClick={() => removeCreateLabel(entry.id)}
                         >
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ))}
-                    {Object.keys(createLabels).length === 0 && (
+                    {createLabelEntries.length === 0 && (
                       <div className="text-sm text-muted-foreground text-center py-4 border rounded-md">
                         Không có labels. Nhấn "Thêm Label" để thêm mới.
                       </div>
@@ -526,33 +519,33 @@ export function Namespaces() {
                     </Button>
                   </div>
                   <div className="space-y-2">
-                    {Object.entries(createAnnotations).map(([key, value]) => (
-                      <div key={key} className="space-y-2">
+                    {createAnnotationEntries.map((entry) => (
+                      <div key={entry.id} className="space-y-2">
                         <div className="flex gap-2">
                           <Input
                             placeholder="Key"
-                            value={key}
-                            onChange={(e) => updateCreateAnnotation(key, e.target.value, value)}
+                            value={entry.key}
+                            onChange={(e) => updateCreateAnnotation(entry.id, 'key', e.target.value)}
                             className="flex-1"
                           />
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            onClick={() => removeCreateAnnotation(key)}
+                            onClick={() => removeCreateAnnotation(entry.id)}
                           >
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
                         <Textarea
                           placeholder="Value"
-                          value={value}
-                          onChange={(e) => updateCreateAnnotation(key, key, e.target.value)}
+                          value={entry.value}
+                          onChange={(e) => updateCreateAnnotation(entry.id, 'value', e.target.value)}
                           className="min-h-[60px]"
                         />
                       </div>
                     ))}
-                    {Object.keys(createAnnotations).length === 0 && (
+                    {createAnnotationEntries.length === 0 && (
                       <div className="text-sm text-muted-foreground text-center py-4 border rounded-md">
                         Không có annotations. Nhấn "Thêm Annotation" để thêm mới.
                       </div>
@@ -568,8 +561,8 @@ export function Namespaces() {
                 variant="outline"
                 onClick={() => {
                   setIsDialogOpen(false);
-                  setCreateLabels({});
-                  setCreateAnnotations({});
+                  setCreateLabelEntries([]);
+                  setCreateAnnotationEntries([]);
                 }}
                 disabled={isSubmitting}
               >
@@ -590,7 +583,7 @@ export function Namespaces() {
                   <Textarea
                     value={yamlContent}
                     onChange={(e) => setYamlContent(e.target.value)}
-                    className="flex-1 font-mono text-xs min-h-[400px]"
+                    className="flex-1 font-mono text-xs min-h-[200px] resize-y"
                     placeholder={`apiVersion: v1
 kind: Namespace
 metadata:
@@ -601,7 +594,7 @@ metadata:
   annotations:
     description: "My production namespace"`}
                   />
-                  <div className="flex justify-end gap-2 pt-2 border-t">
+                  <div className="flex justify-end gap-2 pt-4 border-t mt-4">
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -901,7 +894,7 @@ metadata:
               <Textarea
                 value={yamlEditContent}
                 onChange={(e) => setYamlEditContent(e.target.value)}
-                className="flex-1 font-mono text-xs min-h-[500px]"
+                className="flex-1 font-mono text-xs min-h-[300px] resize-y"
                 placeholder="YAML content..."
               />
               <div className="flex justify-end gap-2">

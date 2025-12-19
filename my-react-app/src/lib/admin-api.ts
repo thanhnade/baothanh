@@ -390,7 +390,7 @@ export const adminAPI = {
     const response = await api.get(`/admin/cluster/namespaces/${name}`);
     return response.data;
   },
-  createNamespace: async (data: Omit<Namespace, "id" | "age">): Promise<Namespace> => {
+  createNamespace: async (data: { name: string; labels?: Record<string, string>; annotations?: Record<string, string> }): Promise<Namespace> => {
     const response = await api.post("/admin/cluster/namespaces", data);
     const ns = response.data;
     return {

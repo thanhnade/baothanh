@@ -9,7 +9,7 @@ spring:
 
   # Database Configuration
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/luanvan2?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://127.0.0.1:3306/luanvan?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
     password: 
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -27,4 +27,8 @@ spring:
 # environment variables
 app:
   vars:
-    dockerhub_username: nguyengiabao1203
+    dockerhub_username: iu1310
+
+server:
+  address: 0.0.0.0
+  port: 8080

@@ -1245,7 +1245,7 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
             serverService.execCommand(serverId, finalCommand, 300000, chunk -> taskStatus.appendLog(chunk));
             
             taskStatus.setProgress(100);
-            taskStatus.markCompleted("🎉 Đã thực thi playbook thành công: " + filename + "\n");
+            taskStatus.markCompleted("");
         } catch (Exception e) {
             taskStatus.markFailed("Lỗi khi thực thi playbook: " + e.getMessage());
         }

@@ -4,6 +4,7 @@ import my_spring_app.my_spring_app.dto.reponse.NamespaceDetailResponse;
 import my_spring_app.my_spring_app.dto.reponse.NamespaceListResponse;
 import my_spring_app.my_spring_app.dto.reponse.NamespaceResponse;
 import my_spring_app.my_spring_app.dto.request.NamespaceRequest;
+import my_spring_app.my_spring_app.dto.request.NamespaceUpdateRequest;
 
 public interface AdminNamespaceService {
 
@@ -14,6 +15,8 @@ public interface AdminNamespaceService {
     NamespaceResponse createNamespace(NamespaceRequest request);
 
     NamespaceResponse createNamespaceFromYaml(String yaml);
+
+    NamespaceResponse updateNamespace(String name, NamespaceUpdateRequest request);
 
     NamespaceResponse updateNamespaceFromYaml(String name, String yaml);
 

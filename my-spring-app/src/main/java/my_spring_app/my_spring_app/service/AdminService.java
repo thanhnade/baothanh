@@ -27,6 +27,7 @@ import my_spring_app.my_spring_app.dto.reponse.DeploymentResponse;
 import my_spring_app.my_spring_app.dto.reponse.PodResponse;
 import my_spring_app.my_spring_app.dto.reponse.StatefulsetResponse;
 import my_spring_app.my_spring_app.dto.request.NamespaceRequest;
+import my_spring_app.my_spring_app.dto.request.NamespaceUpdateRequest;
 
 public interface AdminService {
 
@@ -69,6 +70,8 @@ public interface AdminService {
     NamespaceResponse createNamespace(NamespaceRequest request);
 
     NamespaceResponse createNamespaceFromYaml(String yaml);
+
+    NamespaceResponse updateNamespace(String name, NamespaceUpdateRequest request);
 
     NamespaceResponse updateNamespaceFromYaml(String name, String yaml);
 

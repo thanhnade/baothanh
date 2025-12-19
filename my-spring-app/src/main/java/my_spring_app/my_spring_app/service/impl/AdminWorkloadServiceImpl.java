@@ -206,23 +206,24 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
             DeploymentDetailResponse detail = new DeploymentDetailResponse();
             
             // Basic info từ deployment
-            if (v1Deployment.getMetadata() != null) {
+            V1ObjectMeta metadata = v1Deployment.getMetadata();
+            if (metadata != null) {
                 detail.setId(namespace + "/" + name);
                 detail.setName(name);
                 detail.setNamespace(namespace);
-                detail.setAge(calculateAge(v1Deployment.getMetadata().getCreationTimestamp()));
-                detail.setUid(v1Deployment.getMetadata().getUid());
-                detail.setResourceVersion(v1Deployment.getMetadata().getResourceVersion());
-                if (v1Deployment.getMetadata().getCreationTimestamp() != null) {
-                    detail.setCreationTimestamp(v1Deployment.getMetadata().getCreationTimestamp().toString());
+                detail.setAge(calculateAge(metadata.getCreationTimestamp()));
+                detail.setUid(metadata.getUid());
+                detail.setResourceVersion(metadata.getResourceVersion());
+                if (metadata.getCreationTimestamp() != null) {
+                    detail.setCreationTimestamp(metadata.getCreationTimestamp().toString());
                 }
-                
+
                 // Labels và Annotations
-                if (v1Deployment.getMetadata().getLabels() != null) {
-                    detail.setLabels(new HashMap<>(v1Deployment.getMetadata().getLabels()));
+                if (metadata.getLabels() != null) {
+                    detail.setLabels(new HashMap<>(metadata.getLabels()));
                 }
-                if (v1Deployment.getMetadata().getAnnotations() != null) {
-                    detail.setAnnotations(new HashMap<>(v1Deployment.getMetadata().getAnnotations()));
+                if (metadata.getAnnotations() != null) {
+                    detail.setAnnotations(new HashMap<>(metadata.getAnnotations()));
                 }
             }
 
@@ -323,11 +324,13 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
             }
             detail.setSelector(selector);
 
-            // YAML
+
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(v1Deployment));
+                String yaml = executeCommand(session, "kubectl get deployment " + name + " -n " + namespace + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("Không thể tạo YAML: " + e.getMessage());
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             // Lấy Pods liên quan - sử dụng selector từ deployment
@@ -605,6 +608,8 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
 
     @Override
     public DeploymentResponse scaleDeployment(String namespace, String name, int replicas) {
+        System.out.println("[SCALE] Starting deployment scale: " + namespace + "/" + name + " to " + replicas + " replicas");
+
         if (replicas < 0) {
             throw new IllegalArgumentException("Replicas must be >= 0");
         }
@@ -613,8 +618,10 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
         try {
             session = createSession(masterServer);
             ApiClient client = createKubernetesClient(session);
-            AppsV1Api api = new AppsV1Api(client);
 
+            // Scale deployment replicas directly
+            System.out.println("[SCALE] Scaling deployment replicas: " + namespace + "/" + name + " -> " + replicas);
+            AppsV1Api api = new AppsV1Api(client);
             V1Scale scale = new V1Scale();
             V1ObjectMeta metadata = new V1ObjectMeta();
             metadata.setName(name);
@@ -626,10 +633,13 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
 
             api.replaceNamespacedDeploymentScale(name, namespace, scale, null, null, null, null);
             V1Deployment updated = api.readNamespacedDeployment(name, namespace, null);
+            System.out.println("[SCALE] Deployment scale completed successfully");
             return buildDeploymentResponse(updated, session);
         } catch (ApiException e) {
+            System.err.println("[SCALE] Error scaling deployment: " + e.getResponseBody());
             throw new RuntimeException("Không thể scale deployment: " + e.getResponseBody(), e);
         } catch (Exception e) {
+            System.err.println("[SCALE] Unexpected error scaling deployment: " + e.getMessage());
             throw new RuntimeException("Không thể scale deployment: " + e.getMessage(), e);
         } finally {
             if (session != null && session.isConnected()) {
@@ -637,6 +647,7 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
             }
         }
     }
+
 
     @Override
     public DeploymentResponse updateDeploymentFromYaml(String namespace, String name, String yaml) {
@@ -903,11 +914,12 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
             }
             detail.setEvents(events);
 
-            // YAML
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(v1Pod));
+                String yaml = executeCommand(session, "kubectl get pod " + name + " -n " + namespace + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("Không thể tạo YAML: " + e.getMessage());
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             return detail;
@@ -1244,7 +1256,12 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
     }
 
     @Override
+    /**
+     * Scale StatefulSet replicas directly
+     */
     public StatefulsetResponse scaleStatefulset(String namespace, String name, int replicas) {
+        System.out.println("[SCALE] Starting StatefulSet scale: " + namespace + "/" + name + " to " + replicas + " replicas");
+
         if (replicas < 0) {
             throw new IllegalArgumentException("Replicas must be >= 0");
         }
@@ -1253,8 +1270,10 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
         try {
             session = createSession(masterServer);
             ApiClient client = createKubernetesClient(session);
-            AppsV1Api api = new AppsV1Api(client);
 
+            // Scale StatefulSet replicas directly
+            System.out.println("[SCALE] Scaling StatefulSet replicas directly: " + namespace + "/" + name + " -> " + replicas);
+            AppsV1Api api = new AppsV1Api(client);
             V1Scale scale = new V1Scale();
             V1ObjectMeta metadata = new V1ObjectMeta();
             metadata.setName(name);
@@ -1266,10 +1285,13 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
 
             api.replaceNamespacedStatefulSetScale(name, namespace, scale, null, null, null, null);
             V1StatefulSet updated = api.readNamespacedStatefulSet(name, namespace, null);
+            System.out.println("[SCALE] StatefulSet scale completed successfully");
             return buildStatefulsetResponse(updated, session);
         } catch (ApiException e) {
+            System.err.println("[SCALE] Error scaling StatefulSet: " + e.getResponseBody());
             throw new RuntimeException("Không thể scale statefulset: " + e.getResponseBody(), e);
         } catch (Exception e) {
+            System.err.println("[SCALE] Unexpected error scaling StatefulSet: " + e.getMessage());
             throw new RuntimeException("Không thể scale statefulset: " + e.getMessage(), e);
         } finally {
             if (session != null && session.isConnected()) {
@@ -1277,6 +1299,7 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
             }
         }
     }
+
 
     @Override
     public StatefulsetDetailResponse getStatefulsetDetail(String namespace, String name) {
@@ -1523,11 +1546,13 @@ public class AdminWorkloadServiceImpl extends BaseKubernetesService implements A
             }
             detail.setConditions(conditions);
 
-            // YAML
+
+            // YAML using kubectl (like Rancher)
             try {
-                detail.setYaml(Yaml.dump(v1StatefulSet));
+                String yaml = executeCommand(session, "kubectl get statefulset " + name + " -n " + namespace + " -o yaml", true);
+                detail.setYaml(yaml);
             } catch (Exception e) {
-                detail.setYaml("");
+                detail.setYaml("# Không thể lấy YAML: " + e.getMessage());
             }
 
             return detail;

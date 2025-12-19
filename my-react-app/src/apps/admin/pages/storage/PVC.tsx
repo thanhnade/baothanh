@@ -518,7 +518,7 @@ export function PVCList() {
                   <Textarea
                     value={pvcDetail.yaml || ""}
                     readOnly
-                    className="font-mono text-xs min-h-[400px]"
+                    className="font-mono text-xs min-h-[300px] resize-y"
                   />
                 </TabsContent>
                 <TabsContent value="metadata" className="space-y-4">
@@ -613,7 +613,7 @@ export function PVCList() {
               <Textarea
                 value={yamlEditContent}
                 onChange={(e) => setYamlEditContent(e.target.value)}
-                className="flex-1 font-mono text-xs min-h-[500px]"
+                className="flex-1 font-mono text-xs min-h-[300px] resize-y"
                 placeholder="YAML content..."
               />
               <div className="flex justify-end gap-2">
@@ -709,9 +709,9 @@ export function PVCList() {
                     value={yamlContent}
                     onChange={(e) => setYamlContent(e.target.value)}
                     placeholder="apiVersion: v1&#10;kind: PersistentVolumeClaim&#10;metadata:&#10;  name: my-pvc&#10;  namespace: default&#10;spec:&#10;  accessModes:&#10;    - ReadWriteOnce&#10;  resources:&#10;    requests:&#10;      storage: 1Gi"
-                    className="flex-1 font-mono text-xs min-h-[400px]"
+                    className="flex-1 font-mono text-xs min-h-[200px] resize-y"
                   />
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-4 border-t mt-4">
                     <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                       Hủy
                     </Button>
