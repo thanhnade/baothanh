@@ -169,15 +169,21 @@ export function Servers() {
       const fullServer = await adminAPI.getServer(server.id);
       setEditingServer(fullServer);
       // Load form data từ server
+      const serverRole = fullServer.role || "WORKER";
+      // Nếu role là ANSIBLE hoặc DOCKER, luôn set clusterStatus = UNAVAILABLE
+      const serverClusterStatus = (serverRole === "ANSIBLE" || serverRole === "DOCKER")
+        ? "UNAVAILABLE"
+        : (fullServer.clusterStatus || "UNAVAILABLE");
+      
       setFormData({
         name: fullServer.name || "",
         ipAddress: fullServer.ipAddress || "",
         port: String(fullServer.port || 22),
         username: fullServer.username || "",
         password: "", // Không load password khi edit
-        role: fullServer.role || "WORKER",
+        role: serverRole,
         serverStatus: fullServer.serverStatus || (fullServer.status === "online" ? "RUNNING" : "STOPPED") || "RUNNING",
-        clusterStatus: fullServer.clusterStatus || "UNAVAILABLE",
+        clusterStatus: serverClusterStatus,
       });
       setIsDialogOpen(true);
     } catch (error: any) {
@@ -186,6 +192,12 @@ export function Servers() {
                           "Không thể tải thông tin host";
       toast.error(errorMessage);
       // Fallback: dùng thông tin từ list nếu load detail thất bại
+      const serverRole = server.role || "WORKER";
+      // Nếu role là ANSIBLE hoặc DOCKER, luôn set clusterStatus = UNAVAILABLE
+      const serverClusterStatus = (serverRole === "ANSIBLE" || serverRole === "DOCKER")
+        ? "UNAVAILABLE"
+        : (server.clusterStatus || "UNAVAILABLE");
+      
     setEditingServer(server);
       setFormData({
         name: server.name || "",
@@ -193,9 +205,9 @@ export function Servers() {
         port: String(server.port || 22),
         username: server.username || "",
         password: "",
-        role: server.role || "WORKER",
+        role: serverRole,
         serverStatus: server.serverStatus || (server.status === "online" ? "RUNNING" : "STOPPED") || "RUNNING",
-        clusterStatus: server.clusterStatus || "UNAVAILABLE",
+        clusterStatus: serverClusterStatus,
       });
     setIsDialogOpen(true);
     }
@@ -570,11 +582,17 @@ export function Servers() {
       if (editingServer) {
         // Khi sửa server: chỉ cập nhật các trường cấu hình (không cần test SSH)
         // Chỉ gửi các trường đã thay đổi hoặc các trường cấu hình
+        // Nếu role là ANSIBLE hoặc DOCKER, luôn set clusterStatus = UNAVAILABLE
+        const finalRole = formData.role || "WORKER";
+        const finalClusterStatus = (finalRole === "ANSIBLE" || finalRole === "DOCKER") 
+          ? "UNAVAILABLE" 
+          : (formData.clusterStatus || "UNAVAILABLE");
+        
     const data: any = {
           name: formData.name,
-          role: formData.role || "WORKER",
+          role: finalRole,
           serverStatus: formData.serverStatus || "RUNNING",
-          clusterStatus: formData.clusterStatus || "UNAVAILABLE",
+          clusterStatus: finalClusterStatus,
         };
         
         // Chỉ gửi thông tin kết nối nếu người dùng thực sự thay đổi
@@ -601,15 +619,21 @@ export function Servers() {
         loadServers();
       } else {
         // Khi tạo server mới: gửi đầy đủ thông tin (cần test SSH)
+        // Nếu role là ANSIBLE hoặc DOCKER, luôn set clusterStatus = UNAVAILABLE
+        const finalRole = formData.role || "WORKER";
+        const finalClusterStatus = (finalRole === "ANSIBLE" || finalRole === "DOCKER") 
+          ? "UNAVAILABLE" 
+          : (formData.clusterStatus || "UNAVAILABLE");
+        
         const data: any = {
           name: formData.name,
           ipAddress: formData.ipAddress,
           port: parseInt(formData.port) || 22,
           username: formData.username,
           password: formData.password || "",
-          role: formData.role || "WORKER",
+          role: finalRole,
           serverStatus: formData.serverStatus || "RUNNING",
-          clusterStatus: formData.clusterStatus || "UNAVAILABLE",
+          clusterStatus: finalClusterStatus,
           status: "online" as const,
           os: "Unknown",
         };
@@ -1147,7 +1171,14 @@ export function Servers() {
                       id="role"
                       name="role"
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      onChange={(e) => {
+                        const newRole = e.target.value;
+                        // Nếu role là ANSIBLE hoặc DOCKER, tự động set clusterStatus = UNAVAILABLE
+                        const newClusterStatus = (newRole === "ANSIBLE" || newRole === "DOCKER") 
+                          ? "UNAVAILABLE" 
+                          : formData.clusterStatus;
+                        setFormData({ ...formData, role: newRole, clusterStatus: newClusterStatus });
+                      }}
                       className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       required
                     >
@@ -1209,12 +1240,18 @@ export function Servers() {
                 <div className="space-y-2">
                   <Label htmlFor="clusterStatus" className="text-sm font-medium">
                     Cluster Status <span className="text-destructive">*</span>
+                    {(formData.role === "ANSIBLE" || formData.role === "DOCKER") && (
+                      <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
+                        (Tự động: UNAVAILABLE)
+                      </span>
+                    )}
                   </Label>
                   <select
                     id="clusterStatus"
                     name="clusterStatus"
                     value={formData.clusterStatus}
                     onChange={(e) => setFormData({ ...formData, clusterStatus: e.target.value })}
+                    disabled={formData.role === "ANSIBLE" || formData.role === "DOCKER"}
                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     required
                   >
@@ -1222,7 +1259,9 @@ export function Servers() {
                     <option value="UNAVAILABLE">UNAVAILABLE - Không sẵn sàng</option>
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    Trạng thái tham gia vào Kubernetes cluster
+                    {formData.role === "ANSIBLE" || formData.role === "DOCKER" 
+                      ? "Host với role ANSIBLE/DOCKER không thể tham gia vào Kubernetes cluster"
+                      : "Trạng thái tham gia vào Kubernetes cluster"}
                   </p>
                 </div>
               </TabsContent>
