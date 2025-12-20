@@ -960,12 +960,12 @@ export const infrastructureAPI = {
   checkDockerStatus: async (): Promise<{
     installed: boolean;
     version?: string;
-    dockerHost?: string;
-    dockerRole?: string;
+    controllerHost?: string;
     error?: string;
+    loggedInUsername?: string;
   }> => {
     try {
-      const response = await api.get("/install/docker/status");
+      const response = await api.get("/admin/docker/status");
       return response.data;
     } catch (error: any) {
       console.error("Error checking Docker status:", error);
@@ -974,6 +974,218 @@ export const infrastructureAPI = {
         error.response?.data?.error ||
         error.message ||
         "Không thể kiểm tra trạng thái Docker";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Cài đặt Docker trên server
+   */
+  installDocker: async (params: {
+    controllerHost: string;
+    sudoPassword: string;
+  }): Promise<{
+    success: boolean;
+    taskId?: string;
+    message?: string;
+    error?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/install", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error installing Docker:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể cài đặt Docker";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Gỡ Docker khỏi server
+   */
+  uninstallDocker: async (params: {
+    controllerHost: string;
+    sudoPassword: string;
+  }): Promise<{
+    success: boolean;
+    taskId?: string;
+    message?: string;
+    error?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/uninstall", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error uninstalling Docker:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể gỡ Docker";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Cài đặt lại Docker trên server
+   */
+  reinstallDocker: async (params: {
+    controllerHost: string;
+    sudoPassword: string;
+  }): Promise<{
+    success: boolean;
+    taskId?: string;
+    message?: string;
+    error?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/reinstall", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error reinstalling Docker:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể cài đặt lại Docker";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Lấy trạng thái task Docker
+   */
+  getDockerTaskStatus: async (taskId: string): Promise<{
+    success: boolean;
+    taskId: string;
+    status: string;
+    progress?: number;
+    logs?: string;
+    startTime?: number;
+    endTime?: number;
+    error?: string;
+  }> => {
+    try {
+      const response = await api.get("/admin/docker/task/status", {
+        params: { taskId },
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error("Error getting Docker task status:", error);
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "Không thể lấy trạng thái task";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Test Docker container với hello-world
+   */
+  testDockerContainer: async (params: {
+    controllerHost: string;
+    sudoPassword?: string;
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    output?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/test-container", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error testing Docker container:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể test container";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Đăng nhập Docker Hub
+   */
+  loginDocker: async (params: {
+    controllerHost: string;
+    username: string;
+    password: string;
+    sudoPassword?: string;
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/login", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error logging in to Docker Hub:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể đăng nhập Docker Hub";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Kiểm tra Docker containers (docker ps)
+   */
+  checkDockerPs: async (params: {
+    controllerHost: string;
+    sudoPassword?: string;
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    output?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/ps", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error checking Docker ps:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể kiểm tra Docker containers";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Liệt kê Docker images (docker images)
+   */
+  listDockerImages: async (params: {
+    controllerHost: string;
+    sudoPassword?: string;
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    output?: string;
+  }> => {
+    try {
+      const response = await api.post("/admin/docker/images", params);
+      return response.data;
+    } catch (error: any) {
+      console.error("Error listing Docker images:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể liệt kê Docker images";
       throw new Error(errorMessage);
     }
   },

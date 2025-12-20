@@ -42,7 +42,9 @@ import my_spring_app.my_spring_app.dto.reponse.ClusterInfoResponse;
 import my_spring_app.my_spring_app.dto.reponse.AnsibleConfigResponse;
 import my_spring_app.my_spring_app.dto.reponse.ServerAuthStatusResponse;
 import my_spring_app.my_spring_app.dto.reponse.AnsibleOperationResponse;
+import my_spring_app.my_spring_app.dto.reponse.AnsibleTaskStatusResponse;
 import my_spring_app.my_spring_app.dto.reponse.PlaybookListResponse;
+import my_spring_app.my_spring_app.dto.reponse.DockerStatusResponse;
 import my_spring_app.my_spring_app.dto.request.InstallAnsibleRequest;
 import my_spring_app.my_spring_app.dto.request.InitAnsibleRequest;
 import my_spring_app.my_spring_app.dto.request.SaveAnsibleConfigRequest;
@@ -50,6 +52,8 @@ import my_spring_app.my_spring_app.dto.request.VerifyAnsibleConfigRequest;
 import my_spring_app.my_spring_app.dto.request.SavePlaybookRequest;
 import my_spring_app.my_spring_app.dto.request.DeletePlaybookRequest;
 import my_spring_app.my_spring_app.dto.request.ExecutePlaybookRequest;
+import my_spring_app.my_spring_app.dto.request.InstallDockerRequest;
+import my_spring_app.my_spring_app.dto.request.DockerLoginRequest;
 import my_spring_app.my_spring_app.dto.request.InstallK8sRequest;
 import my_spring_app.my_spring_app.dto.request.NamespaceRequest;
 import my_spring_app.my_spring_app.dto.request.NamespaceUpdateRequest;
@@ -63,6 +67,7 @@ import my_spring_app.my_spring_app.dto.request.PVCRequest;
 import my_spring_app.my_spring_app.dto.request.PVRequest;
 import my_spring_app.my_spring_app.service.AdminService;
 import my_spring_app.my_spring_app.service.AnsibleService;
+import my_spring_app.my_spring_app.service.DockerService;
 import my_spring_app.my_spring_app.service.ServerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -82,7 +87,10 @@ public class AdminController {
 
     @Autowired
     private AnsibleService ansibleService;
-    
+
+    @Autowired
+    private DockerService dockerService;
+
     @Autowired
     private ServerService serverService;
 
@@ -807,7 +815,7 @@ public class AdminController {
         AnsibleOperationResponse response = ansibleService.uploadPlaybook(file, controllerHost, sudoPassword);
         return ResponseEntity.ok(response);
     }
-    
+
     // ==================== Install K8s ====================
     
     // Infrastructure - Install K8s Tab 1
@@ -828,6 +836,79 @@ public class AdminController {
     @PostMapping("/k8s/install/tab3")
     public ResponseEntity<AnsibleOperationResponse> installK8sTab3(@Valid @RequestBody InstallK8sRequest request) {
         AnsibleOperationResponse response = ansibleService.installK8sTab3(request);
+        return ResponseEntity.ok(response);
+    }
+
+        // ==================== Docker ====================
+
+    // Infrastructure - Docker Status
+    @GetMapping("/docker/status")
+    public ResponseEntity<DockerStatusResponse> getDockerStatus() {
+        try {
+            DockerStatusResponse response = dockerService.getDockerStatus();
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            // Trả về response với error nếu có exception
+            DockerStatusResponse errorResponse = new DockerStatusResponse();
+            errorResponse.setInstalled(false);
+            errorResponse.setError("Lỗi khi kiểm tra trạng thái Docker: " + e.getMessage());
+            return ResponseEntity.ok(errorResponse);
+        }
+    }
+
+    // Infrastructure - Install Docker
+    @PostMapping("/docker/install")
+    public ResponseEntity<AnsibleOperationResponse> installDocker(@Valid @RequestBody InstallDockerRequest request) {
+        AnsibleOperationResponse response = dockerService.installDocker(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - Uninstall Docker
+    @PostMapping("/docker/uninstall")
+    public ResponseEntity<AnsibleOperationResponse> uninstallDocker(@Valid @RequestBody InstallDockerRequest request) {
+        AnsibleOperationResponse response = dockerService.uninstallDocker(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - Reinstall Docker
+    @PostMapping("/docker/reinstall")
+    public ResponseEntity<AnsibleOperationResponse> reinstallDocker(@Valid @RequestBody InstallDockerRequest request) {
+        AnsibleOperationResponse response = dockerService.reinstallDocker(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - Get Docker Task Status
+    @GetMapping("/docker/task/status")
+    public ResponseEntity<AnsibleTaskStatusResponse> getDockerTaskStatus(@RequestParam String taskId) {
+        AnsibleTaskStatusResponse response = dockerService.getDockerTaskStatus(taskId);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - Test Docker Container
+    @PostMapping("/docker/test-container")
+    public ResponseEntity<AnsibleOperationResponse> testDockerContainer(@Valid @RequestBody InstallDockerRequest request) {
+        AnsibleOperationResponse response = dockerService.testDockerContainer(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - Docker Login
+    @PostMapping("/docker/login")
+    public ResponseEntity<AnsibleOperationResponse> loginDocker(@Valid @RequestBody DockerLoginRequest request) {
+        AnsibleOperationResponse response = dockerService.loginDocker(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - Check Docker PS
+    @PostMapping("/docker/ps")
+    public ResponseEntity<AnsibleOperationResponse> checkDockerPs(@Valid @RequestBody InstallDockerRequest request) {
+        AnsibleOperationResponse response = dockerService.checkDockerPs(request);
+        return ResponseEntity.ok(response);
+    }
+
+    // Infrastructure - List Docker Images
+    @PostMapping("/docker/images")
+    public ResponseEntity<AnsibleOperationResponse> listDockerImages(@Valid @RequestBody InstallDockerRequest request) {
+        AnsibleOperationResponse response = dockerService.listDockerImages(request);
         return ResponseEntity.ok(response);
     }
 }

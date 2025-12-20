@@ -1758,6 +1758,9 @@ export const adminAPI = {
   
   // Docker
   checkDockerStatus: infrastructureAPI.checkDockerStatus,
+  installDocker: infrastructureAPI.installDocker,
+  uninstallDocker: infrastructureAPI.uninstallDocker,
+  reinstallDocker: infrastructureAPI.reinstallDocker,
   
   // Cluster Management
   getClusterInfo: infrastructureAPI.getClusterInfo,

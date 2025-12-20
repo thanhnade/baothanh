@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { adminAPI } from "@/lib/admin-api";
+import { infrastructureAPI } from "@/lib/infrastructure-api";
 import { playbookTemplateCatalog, getPlaybookTemplateById } from "@/lib/playbook-templates";
 import type { Server, Cluster } from "@/types/admin";
 import { Button } from "@/components/ui/button";
@@ -181,8 +182,45 @@ export function ClusterSetupAmd() {
   const [showAnsibleConfig, setShowAnsibleConfig] = useState(false);
   const [isCheckingAnsibleStatus, setIsCheckingAnsibleStatus] = useState(false);
 
+  // Docker states
+  const [isInstallingDocker, setIsInstallingDocker] = useState(false);
+  const [isUninstallingDocker, setIsUninstallingDocker] = useState(false);
+  const [isCheckingDockerStatus, setIsCheckingDockerStatus] = useState(false);
+  const [isTestingContainer, setIsTestingContainer] = useState(false);
+  const [isLoggingInDocker, setIsLoggingInDocker] = useState(false);
+  const [isCheckingDockerPs, setIsCheckingDockerPs] = useState(false);
+  const [isListingDockerImages, setIsListingDockerImages] = useState(false);
+  const [showDockerLoginModal, setShowDockerLoginModal] = useState(false);
+  const [showTestContainerModal, setShowTestContainerModal] = useState(false);
+  const [showDockerPsModal, setShowDockerPsModal] = useState(false);
+  const [showDockerImagesModal, setShowDockerImagesModal] = useState(false);
+  const [testContainerOutput, setTestContainerOutput] = useState<string>("");
+  const [testContainerSuccess, setTestContainerSuccess] = useState<boolean>(false);
+  const [dockerPsOutput, setDockerPsOutput] = useState<string>("");
+  const [dockerPsSuccess, setDockerPsSuccess] = useState<boolean>(false);
+  const [dockerImagesOutput, setDockerImagesOutput] = useState<string>("");
+  const [dockerImagesSuccess, setDockerImagesSuccess] = useState<boolean>(false);
+  const [dockerLoginUsername, setDockerLoginUsername] = useState("");
+  const [dockerLoginPassword, setDockerLoginPassword] = useState("");
+  const [dockerStatus, setDockerStatus] = useState<{
+    installed: boolean;
+    version?: string;
+    controllerHost?: string;
+    error?: string;
+    loggedInUsername?: string;
+  } | null>(null);
+
+  // Docker operation steps
+  const [dockerOperationSteps, setDockerOperationSteps] = useState<Array<{
+    id: string;
+    label: string;
+    status: "pending" | "running" | "completed" | "error";
+    description?: string;
+  }>>([]);
+
   // Completion tracking states
   const [part1Completed, setPart1Completed] = useState(false);
+  const [part3Completed, setPart3Completed] = useState(false);
   const [k8sActiveTab, setK8sActiveTab] = useState<string>("tab1");
 
   // Step tracking states for Part 1 (Ansible) - 3 bước
@@ -333,9 +371,16 @@ export function ClusterSetupAmd() {
     }
   }, [currentExecutingStep?.logs]);
 
+  // Auto-check Docker status when docker servers are available
+  useEffect(() => {
+    if (servers.filter(s => s.role === "DOCKER").length > 0 && !dockerStatus && !isCheckingDockerStatus) {
+      handleCheckDockerStatus(true); // Silent check
+    }
+  }, [servers?.length]);
+
   // Init quickly steps status for quick modal - Bước 2 có 3 bước con
   const [initQuicklySteps, setInitQuicklySteps] = useState<Array<{
-    id: number;
+    id: number; 
     label: string;
     status: "pending" | "running" | "completed" | "error";
     errorMessage?: string;
@@ -357,7 +402,7 @@ export function ClusterSetupAmd() {
     errorMessage?: string;
   }>({ status: "pending" });
   const [sudoPasswords, setSudoPasswords] = useState<Record<string, string>>({});
-  const [pendingAnsibleAction, setPendingAnsibleAction] = useState<"install" | "reinstall" | "uninstall" | null>(null);
+  const [pendingAnsibleAction, setPendingAnsibleAction] = useState<"install" | "reinstall" | "uninstall" | "install-docker" | "uninstall-docker" | "reinstall-docker" | null>(null);
   const [pendingControllerHost, setPendingControllerHost] = useState<string | null>(null);
   const [pendingServerId, setPendingServerId] = useState<number | null>(null);
 
@@ -414,6 +459,9 @@ export function ClusterSetupAmd() {
   const [initSudoPassword, setInitSudoPassword] = useState<string>("");
   const initTaskLogLengthRef = useRef(0);
   const initTaskPollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Docker task polling
+  const dockerTaskPollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   // Prerequisites check states
@@ -1055,7 +1103,7 @@ export function ClusterSetupAmd() {
 
     setIsCheckingAuthStatus(true);
     try {
-      const status = await adminAPI.checkServerAuthStatus(pendingServerId);
+      const status = await adminAPI.checkServerAuthStatus(pendingServerId!);
       setServerAuthStatus(status);
     } catch (error: any) {
       const errorMessage = error.message || "Không thể kiểm tra trạng thái xác thực";
@@ -1139,6 +1187,9 @@ export function ClusterSetupAmd() {
       setCluster(clusterData);
       setServers(serversData);
       checkPrerequisites(clusterData, serversData);
+
+      // Check Docker status silently
+      await handleCheckDockerStatus(true);
     } catch (error: any) {
       console.error("Error loading data:", error);
       const errorMessage = error?.message || "Không thể tải dữ liệu";
@@ -1179,6 +1230,16 @@ export function ClusterSetupAmd() {
     if (onlineMasters.length > 0) return onlineMasters[0];
     if (ansibleServers.length > 0) return ansibleServers[0];
     if (masterServers.length > 0) return masterServers[0];
+    return null;
+  };
+
+  // Filter servers by role
+  const dockerServers = servers.filter((s) => s.role === "DOCKER");
+
+  const pickDockerServer = () => {
+    const onlineDocker = dockerServers.filter((s) => s.status === "online");
+    if (onlineDocker.length > 0) return onlineDocker[0];
+    if (dockerServers.length > 0) return dockerServers[0];
     return null;
   };
 
@@ -1234,7 +1295,7 @@ export function ClusterSetupAmd() {
 
     if (controllerServer.status !== "online") {
       toast.error(
-        `Máy controller không online: ${controllerServer.ipAddress} (${controllerServer.role || "UNKNOWN"})`
+        `Máy Ansible không online: ${controllerServer.ipAddress} (${controllerServer.role || "UNKNOWN"})`
       );
       return;
     }
@@ -1477,6 +1538,548 @@ export function ClusterSetupAmd() {
     } finally {
       setIsUninstallingAnsible(false);
       // Không set pendingAnsibleAction về null để giữ modal mở và cho phép đóng thủ công
+    }
+  };
+
+  // Docker functions
+  const handleCheckDockerStatus = async (silent: boolean = false) => {
+    try {
+      setIsCheckingDockerStatus(true);
+
+      // Gọi API thực để kiểm tra Docker status
+      const status = await adminAPI.checkDockerStatus();
+
+      setDockerStatus(status);
+
+      if (!silent) {
+        if (status.error) {
+          toast.warning(status.error);
+        } else if (status.controllerHost) {
+          toast.success(`Đã kiểm tra trạng thái Docker trên ${status.controllerHost}`);
+        } else {
+          toast.success("Đã kiểm tra trạng thái Docker");
+        }
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || "Không thể kiểm tra trạng thái Docker";
+      setDockerStatus({
+        installed: false,
+        version: undefined,
+        controllerHost: undefined,
+        error: errorMessage,
+      });
+      if (!silent) {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setIsCheckingDockerStatus(false);
+    }
+  };
+
+  const handleInstallDocker = () => {
+    const dockerServer = pickDockerServer();
+    if (!dockerServer) {
+      toast.error("Chưa có server nào với role DOCKER. Vui lòng thêm server DOCKER trong trang Hosts.");
+      return;
+    }
+
+    if (dockerServer.status !== "online") {
+      toast.error(
+        `Máy Docker không online: ${dockerServer.ipAddress} (${dockerServer.role || "UNKNOWN"})`
+      );
+      return;
+    }
+
+    // Khởi tạo các bước cài đặt Docker
+    const dockerSteps = [
+      {
+        id: "1",
+        label: "Bước 1: Cập nhật packages",
+        status: "pending" as const,
+        description: "Cập nhật package index và cài đặt dependencies",
+      },
+      {
+        id: "2",
+        label: "Bước 2: Thêm Docker GPG key",
+        status: "pending" as const,
+        description: "Thêm Docker GPG key vào hệ thống",
+      },
+      {
+        id: "3",
+        label: "Bước 3: Thêm Docker repository",
+        status: "pending" as const,
+        description: "Thêm Docker repository vào apt sources",
+      },
+      {
+        id: "4",
+        label: "Bước 4: Cài đặt Docker Engine",
+        status: "pending" as const,
+        description: "Cài đặt Docker Engine và containerd",
+      },
+      {
+        id: "5",
+        label: "Bước 5: Khởi động Docker service",
+        status: "pending" as const,
+        description: "Khởi động và kích hoạt Docker service",
+      },
+    ];
+
+    setDockerOperationSteps(dockerSteps);
+    setPendingControllerHost(dockerServer.ipAddress);
+    setPendingServerId(parseInt(dockerServer.id));
+    setPendingAnsibleAction("install-docker");
+    setShowSudoPasswordModal(true);
+  };
+
+  const handleConfirmInstallDocker = async () => {
+    if (!pendingControllerHost) {
+      toast.error("Không tìm thấy máy Docker.");
+      return;
+    }
+
+    const sudoPassword = sudoPasswords[pendingControllerHost] || "";
+
+    // Kiểm tra nếu cần password nhưng chưa nhập
+    if (serverAuthStatus?.needsPassword && (!sudoPassword || sudoPassword.trim() === "")) {
+      toast.error("Vui lòng nhập sudo password.");
+      return;
+    }
+
+    try {
+      setIsInstallingDocker(true);
+
+      // Khởi tạo các bước cài đặt Docker
+      const dockerSteps = [
+        {
+          id: "1",
+          label: "Bước 1: Cập nhật packages",
+          status: "pending" as const,
+          description: "Cập nhật package index và cài đặt dependencies",
+        },
+        {
+          id: "2",
+          label: "Bước 2: Thêm Docker GPG key",
+          status: "pending" as const,
+          description: "Thêm Docker GPG key vào hệ thống",
+        },
+        {
+          id: "3",
+          label: "Bước 3: Thêm Docker repository",
+          status: "pending" as const,
+          description: "Thêm Docker repository vào apt sources",
+        },
+        {
+          id: "4",
+          label: "Bước 4: Cài đặt Docker Engine",
+          status: "pending" as const,
+          description: "Cài đặt Docker Engine và containerd",
+        },
+        {
+          id: "5",
+          label: "Bước 5: Khởi động Docker service",
+          status: "pending" as const,
+          description: "Khởi động và kích hoạt Docker service",
+        },
+      ];
+
+      setDockerOperationSteps(dockerSteps);
+
+      // Gọi API cài đặt Docker
+      const result = await adminAPI.installDocker({
+        controllerHost: pendingControllerHost,
+        sudoPassword: sudoPassword,
+      });
+
+      if (result.success && result.taskId) {
+        toast.success("Đã bắt đầu cài đặt Docker");
+        
+        // Bắt đầu poll status
+        try {
+          await monitorDockerTask(result.taskId, 5);
+          // Hoàn thành
+          setPart3Completed(true);
+          toast.success("Cài đặt Docker hoàn tất!");
+          await handleCheckDockerStatus(true);
+        } catch (error: any) {
+          toast.error(error.message || "Cài đặt Docker thất bại");
+        }
+      } else {
+        // Hiển thị lỗi ngay lập tức và reset steps
+        setDockerOperationSteps(prev =>
+          prev.map(step => ({ ...step, status: "error" as const }))
+        );
+        throw new Error(result.message || result.error || "Cài đặt Docker thất bại");
+      }
+
+    } catch (error: any) {
+      const errorMessage = error.message || "Không thể cài đặt Docker";
+      toast.error(errorMessage);
+    } finally {
+      setIsInstallingDocker(false);
+    }
+  };
+
+  const handleUninstallDocker = () => {
+    const dockerServer = pickDockerServer();
+    if (!dockerServer) {
+      toast.error("Chưa có server nào với role DOCKER. Vui lòng thêm server DOCKER trong trang Hosts.");
+      return;
+    }
+
+    // Khởi tạo các bước gỡ Docker
+    const dockerSteps = [
+      {
+        id: "1",
+        label: "Bước 1: Dừng Docker service",
+        status: "pending" as const,
+        description: "Dừng Docker daemon",
+      },
+      {
+        id: "2",
+        label: "Bước 2: Gỡ Docker packages",
+        status: "pending" as const,
+        description: "Gỡ Docker Engine và containerd",
+      },
+      {
+        id: "3",
+        label: "Bước 3: Xóa Docker data",
+        status: "pending" as const,
+        description: "Xóa Docker images, containers và volumes",
+      },
+      {
+        id: "4",
+        label: "Bước 4: Dọn dẹp cấu hình",
+        status: "pending" as const,
+        description: "Xóa các file cấu hình Docker",
+      },
+    ];
+
+    setDockerOperationSteps(dockerSteps);
+    setPendingControllerHost(dockerServer.ipAddress);
+    setPendingServerId(parseInt(dockerServer.id));
+    setPendingAnsibleAction("uninstall-docker");
+    setShowSudoPasswordModal(true);
+  };
+
+  const handleConfirmUninstallDocker = async () => {
+    if (!pendingControllerHost) {
+      toast.error("Không tìm thấy máy Docker.");
+      return;
+    }
+
+    const sudoPassword = sudoPasswords[pendingControllerHost] || "";
+
+    // Kiểm tra nếu cần password nhưng chưa nhập
+    if (serverAuthStatus?.needsPassword && (!sudoPassword || sudoPassword.trim() === "")) {
+      toast.error("Vui lòng nhập sudo password.");
+      return;
+    }
+
+    try {
+      setIsUninstallingDocker(true);
+
+      // Khởi tạo các bước gỡ Docker
+      const dockerSteps = [
+        {
+          id: "1",
+          label: "Bước 1: Dừng Docker service",
+          status: "pending" as const,
+          description: "Dừng Docker daemon",
+        },
+        {
+          id: "2",
+          label: "Bước 2: Gỡ Docker packages",
+          status: "pending" as const,
+          description: "Gỡ Docker Engine và containerd",
+        },
+        {
+          id: "3",
+          label: "Bước 3: Xóa Docker data",
+          status: "pending" as const,
+          description: "Xóa Docker images, containers và volumes",
+        },
+        {
+          id: "4",
+          label: "Bước 4: Dọn dẹp cấu hình",
+          status: "pending" as const,
+          description: "Xóa các file cấu hình Docker",
+        },
+      ];
+
+      setDockerOperationSteps(dockerSteps);
+
+      // Gọi API gỡ Docker
+      const result = await adminAPI.uninstallDocker({
+        controllerHost: pendingControllerHost,
+        sudoPassword: sudoPassword,
+      });
+
+      if (result.success && result.taskId) {
+        toast.success("Đã bắt đầu gỡ Docker");
+        
+        // Bắt đầu poll status
+        try {
+          await monitorDockerTask(result.taskId, 4);
+          // Hoàn thành
+          setPart3Completed(false);
+          toast.success("Gỡ Docker hoàn tất!");
+          await handleCheckDockerStatus(true);
+        } catch (error: any) {
+          toast.error(error.message || "Gỡ Docker thất bại");
+        }
+      } else {
+        // Hiển thị lỗi ngay lập tức và reset steps
+        setDockerOperationSteps(prev =>
+          prev.map(step => ({ ...step, status: "error" as const }))
+        );
+        throw new Error(result.message || result.error || "Gỡ Docker thất bại");
+      }
+
+    } catch (error: any) {
+      const errorMessage = error.message || "Không thể gỡ Docker";
+      toast.error(errorMessage);
+    } finally {
+      setIsUninstallingDocker(false);
+    }
+  };
+
+  const handleTestDockerContainer = async () => {
+    const dockerServer = pickDockerServer();
+    if (!dockerServer) {
+      toast.error("Chưa có server nào với role DOCKER.");
+      return;
+    }
+
+    if (dockerServer.status !== "online") {
+      toast.error(`Máy Docker không online: ${dockerServer.ipAddress}`);
+      return;
+    }
+
+    // Kiểm tra nếu cần password nhưng chưa nhập
+    const sudoPassword = sudoPasswords[dockerServer.ipAddress] || "";
+    if (serverAuthStatus?.needsPassword && (!sudoPassword || sudoPassword.trim() === "")) {
+      toast.error("Vui lòng nhập sudo password trước khi test container");
+      return;
+    }
+
+    try {
+      setIsTestingContainer(true);
+      setTestContainerOutput("");
+      setShowTestContainerModal(true);
+      
+      const result = await infrastructureAPI.testDockerContainer({
+        controllerHost: dockerServer.ipAddress,
+        sudoPassword: sudoPassword,
+      });
+
+      setTestContainerSuccess(result.success || false);
+      setTestContainerOutput(result.output || result.message || result.error || "Không có output");
+      
+      if (result.success) {
+        toast.success("Test container thành công!");
+      } else {
+        toast.error(result.message || result.error || "Test container thất bại");
+      }
+    } catch (error: any) {
+      setTestContainerSuccess(false);
+      setTestContainerOutput(error.message || "Không thể test container");
+      toast.error(error.message || "Không thể test container");
+    } finally {
+      setIsTestingContainer(false);
+    }
+  };
+
+  const handleCheckDockerPs = async () => {
+    const dockerServer = pickDockerServer();
+    if (!dockerServer) {
+      toast.error("Chưa có server nào với role DOCKER.");
+      return;
+    }
+
+    if (dockerServer.status !== "online") {
+      toast.error(`Máy Docker không online: ${dockerServer.ipAddress}`);
+      return;
+    }
+
+    try {
+      setIsCheckingDockerPs(true);
+      setDockerPsOutput("");
+      setShowDockerPsModal(true);
+      
+      const result = await infrastructureAPI.checkDockerPs({
+        controllerHost: dockerServer.ipAddress,
+        sudoPassword: sudoPasswords[dockerServer.ipAddress] || "",
+      });
+
+      setDockerPsSuccess(result.success || false);
+      setDockerPsOutput(result.output || result.message || result.error || "Không có output");
+      
+      if (result.success) {
+        toast.success("Kiểm tra Docker containers thành công!");
+      } else {
+        toast.error(result.message || result.error || "Kiểm tra thất bại");
+      }
+    } catch (error: any) {
+      setDockerPsSuccess(false);
+      setDockerPsOutput(error.message || "Không thể kiểm tra Docker containers");
+      toast.error(error.message || "Không thể kiểm tra Docker containers");
+    } finally {
+      setIsCheckingDockerPs(false);
+    }
+  };
+
+  const handleListDockerImages = async () => {
+    const dockerServer = pickDockerServer();
+    if (!dockerServer) {
+      toast.error("Chưa có server nào với role DOCKER.");
+      return;
+    }
+
+    if (dockerServer.status !== "online") {
+      toast.error(`Máy Docker không online: ${dockerServer.ipAddress}`);
+      return;
+    }
+
+    try {
+      setIsListingDockerImages(true);
+      setDockerImagesOutput("");
+      setShowDockerImagesModal(true);
+      
+      const result = await infrastructureAPI.listDockerImages({
+        controllerHost: dockerServer.ipAddress,
+        sudoPassword: sudoPasswords[dockerServer.ipAddress] || "",
+      });
+
+      setDockerImagesSuccess(result.success || false);
+      setDockerImagesOutput(result.output || result.message || result.error || "Không có output");
+      
+      if (result.success) {
+        toast.success("Liệt kê Docker images thành công!");
+      } else {
+        toast.error(result.message || result.error || "Liệt kê thất bại");
+      }
+    } catch (error: any) {
+      setDockerImagesSuccess(false);
+      setDockerImagesOutput(error.message || "Không thể liệt kê Docker images");
+      toast.error(error.message || "Không thể liệt kê Docker images");
+    } finally {
+      setIsListingDockerImages(false);
+    }
+  };
+
+  const handleDockerLogin = async () => {
+    const dockerServer = pickDockerServer();
+    if (!dockerServer) {
+      toast.error("Chưa có server nào với role DOCKER.");
+      return;
+    }
+
+    if (!dockerLoginUsername.trim() || !dockerLoginPassword.trim()) {
+      toast.error("Vui lòng nhập đầy đủ username và password");
+      return;
+    }
+
+    try {
+      setIsLoggingInDocker(true);
+      const result = await infrastructureAPI.loginDocker({
+        controllerHost: dockerServer.ipAddress,
+        username: dockerLoginUsername,
+        password: dockerLoginPassword,
+        sudoPassword: sudoPasswords[dockerServer.ipAddress] || "",
+      });
+
+      if (result.success) {
+        toast.success("Đăng nhập Docker Hub thành công!");
+        setShowDockerLoginModal(false);
+        setDockerLoginUsername("");
+        setDockerLoginPassword("");
+        // Refresh Docker status để cập nhật username đã đăng nhập
+        await handleCheckDockerStatus(true);
+      } else {
+        toast.error(result.message || result.error || "Đăng nhập thất bại");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Không thể đăng nhập Docker Hub");
+    } finally {
+      setIsLoggingInDocker(false);
+    }
+  };
+
+  const handleConfirmReinstallDocker = async () => {
+    if (!pendingControllerHost) {
+      toast.error("Không tìm thấy máy Docker.");
+      return;
+    }
+
+    const sudoPassword = sudoPasswords[pendingControllerHost] || "";
+
+    // Kiểm tra nếu cần password nhưng chưa nhập
+    if (serverAuthStatus?.needsPassword && (!sudoPassword || sudoPassword.trim() === "")) {
+      toast.error("Vui lòng nhập sudo password.");
+      return;
+    }
+
+    try {
+      setIsInstallingDocker(true);
+
+      // Khởi tạo các bước cài đặt lại Docker
+      const dockerSteps = [
+        {
+          id: "1",
+          label: "Bước 1: Dừng Docker service",
+          status: "pending" as const,
+          description: "Dừng Docker daemon",
+        },
+        {
+          id: "2",
+          label: "Bước 2: Gỡ Docker cũ",
+          status: "pending" as const,
+          description: "Gỡ Docker Engine cũ",
+        },
+        {
+          id: "3",
+          label: "Bước 3: Cài đặt Docker mới",
+          status: "pending" as const,
+          description: "Cài đặt Docker Engine mới",
+        },
+        {
+          id: "4",
+          label: "Bước 4: Khởi động service",
+          status: "pending" as const,
+          description: "Khởi động Docker service",
+        },
+      ];
+
+      setDockerOperationSteps(dockerSteps);
+
+      // Gọi API cài đặt lại Docker
+      const result = await adminAPI.reinstallDocker({
+        controllerHost: pendingControllerHost,
+        sudoPassword: sudoPassword,
+      });
+
+      if (result.success && result.taskId) {
+        toast.success("Đã bắt đầu cài đặt lại Docker");
+        
+        // Bắt đầu poll status
+        try {
+          await monitorDockerTask(result.taskId, 5);
+          // Hoàn thành
+          setPart3Completed(true);
+          toast.success("Cài đặt lại Docker hoàn tất!");
+          await handleCheckDockerStatus(true);
+        } catch (error: any) {
+          toast.error(error.message || "Cài đặt lại Docker thất bại");
+        }
+      } else {
+        throw new Error(result.message || result.error || "Cài đặt lại Docker thất bại");
+      }
+
+    } catch (error: any) {
+      const errorMessage = error.message || "Không thể cài đặt lại Docker";
+      toast.error(errorMessage);
+    } finally {
+      setIsInstallingDocker(false);
     }
   };
 
@@ -2161,8 +2764,88 @@ export function ClusterSetupAmd() {
   useEffect(() => {
     return () => {
       cancelInitTaskPolling();
+      if (dockerTaskPollingRef.current) {
+        clearTimeout(dockerTaskPollingRef.current);
+        dockerTaskPollingRef.current = null;
+      }
     };
   }, [cancelInitTaskPolling]);
+
+  const cancelDockerTaskPolling = useCallback(() => {
+    if (dockerTaskPollingRef.current) {
+      clearTimeout(dockerTaskPollingRef.current);
+      dockerTaskPollingRef.current = null;
+    }
+  }, []);
+
+  const monitorDockerTask = useCallback(
+    (taskId: string, maxSteps: number = 5) => {
+      return new Promise<void>((resolve, reject) => {
+        const poll = async () => {
+          try {
+            const status = await infrastructureAPI.getDockerTaskStatus(taskId);
+            
+            // Cập nhật steps theo currentStep từ BE
+            if (status.status === "running" && status.progress !== undefined) {
+              const currentStep = Math.ceil((status.progress / 100) * maxSteps);
+              setDockerOperationSteps(prev =>
+                prev.map((step, index) => {
+                  const stepNum = parseInt(step.id);
+                  if (stepNum < currentStep) {
+                    return { ...step, status: "completed" as const };
+                  } else if (stepNum === currentStep) {
+                    return { ...step, status: "running" as const };
+                  } else {
+                    return { ...step, status: "pending" as const };
+                  }
+                })
+              );
+            }
+
+            if (status.status === "running") {
+              dockerTaskPollingRef.current = setTimeout(poll, 1000);
+            } else if (status.status === "completed") {
+              cancelDockerTaskPolling();
+              // Đánh dấu tất cả steps là completed
+              setDockerOperationSteps(prev =>
+                prev.map(step => ({ ...step, status: "completed" as const }))
+              );
+              resolve();
+            } else if (status.status === "failed") {
+              cancelDockerTaskPolling();
+              // Đánh dấu step hiện tại là error
+              const currentStep = Math.ceil((status.progress || 0) / 100 * maxSteps);
+              setDockerOperationSteps(prev =>
+                prev.map((step, index) => {
+                  const stepNum = parseInt(step.id);
+                  if (stepNum === currentStep) {
+                    return { ...step, status: "error" as const };
+                  } else if (stepNum < currentStep) {
+                    return { ...step, status: "completed" as const };
+                  } else {
+                    return { ...step, status: "pending" as const };
+                  }
+                })
+              );
+              reject(new Error(status.error || "Cài đặt Docker thất bại"));
+            } else if (status.status === "not_found") {
+              cancelDockerTaskPolling();
+              reject(new Error("Không tìm thấy task hoặc task đã hết hạn"));
+            } else {
+              cancelDockerTaskPolling();
+              resolve();
+            }
+          } catch (error) {
+            cancelDockerTaskPolling();
+            reject(error);
+          }
+        };
+
+        poll();
+      });
+    },
+    [cancelDockerTaskPolling]
+  );
 
   const monitorInitTask = useCallback(
     (taskId: string, stepLabel: string) => {
@@ -3335,7 +4018,7 @@ export function ClusterSetupAmd() {
                   <div className="p-4 border border-dashed rounded-lg text-center text-muted-foreground">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p className="font-medium">{ansibleStatus.error}</p>
-                    <p className="text-sm mt-1">Vui lòng thêm server với role ANSIBLE hoặc MASTER trong trang Servers</p>
+                    <p className="text-sm mt-1">Vui lòng thêm server với role ANSIBLE trong trang Hosts</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -3372,9 +4055,9 @@ export function ClusterSetupAmd() {
                       </div>
                     </div>
 
-                    {/* Máy controller */}
+                    {/* Máy Ansible */}
                     <div className="space-y-2">
-                      <Label className="text-sm text-muted-foreground font-medium">Máy controller</Label>
+                      <Label className="text-sm text-muted-foreground font-medium">Máy Ansible</Label>
                       <div className="font-medium text-sm min-h-[24px] flex items-center">
                         {isCheckingAnsibleStatus ? (
                           <span className="text-muted-foreground">Đang kiểm tra...</span>
@@ -3820,7 +4503,7 @@ export function ClusterSetupAmd() {
                     <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg">
                       <Settings className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
                     </div>
-                    Tùy chọn khác cho Phần 2
+                    Tùy chọn khác
                   </CardTitle>
                   <CardDescription className="text-sm">
                     Thực hiện nhanh các tác vụ độc lập như reset cluster, cài đặt Helm hoặc join thêm worker.
@@ -4841,12 +5524,379 @@ export function ClusterSetupAmd() {
         </DialogContent>
       </Dialog>
 
+      {/* Phần 3: Cài đặt Docker */}
+      <Card className="border-2">
+        <CardHeader>
+          <button
+            onClick={() => toggleSection("docker")}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
+                <Package className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-xl">Phần 3: Cài đặt Docker</CardTitle>
+                  {part3Completed && (
+                    <Badge variant="default" className="bg-green-500">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Hoàn thành
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription className="mt-1">
+                  Cài đặt Docker Engine trên controller server để chuẩn bị cho Kubernetes cluster
+                </CardDescription>
+              </div>
+            </div>
+            {expandedSection === "docker" ? (
+              <ChevronDown className="h-5 w-5" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            )}
+          </button>
+        </CardHeader>
+        {expandedSection === "docker" && (
+          <CardContent className="space-y-4">
+            {/* Card hiển thị thông tin Docker */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Thông tin Docker</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {dockerServers.length === 0 ? (
+                  <div className="p-4 border border-dashed rounded-lg text-center text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="font-medium">Không tìm thấy server Docker</p>
+                    <p className="text-sm mt-1">Vui lòng thêm server với role DOCKER trong trang Hosts</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Trạng thái */}
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground font-medium">Trạng thái</Label>
+                      <div className="flex items-center gap-2 min-h-[24px]">
+                        {isCheckingDockerStatus ? (
+                          <>
+                            <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                            <span className="font-medium text-sm">Đang kiểm tra...</span>
+                          </>
+                        ) : dockerStatus?.controllerHost ? (
+                          <>
+                            <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                            <span className="font-medium text-sm">Online</span>
+                          </>
+                        ) : dockerServers.length > 0 && dockerServers[0]?.status === "online" ? (
+                          <>
+                            <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                            <span className="font-medium text-sm">Online</span>
+                          </>
+                        ) : dockerServers.length > 0 ? (
+                          <>
+                            <div className="h-2 w-2 rounded-full bg-gray-400"></div>
+                            <span className="font-medium text-sm">Chưa kiểm tra</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="h-2 w-2 rounded-full bg-gray-400"></div>
+                            <span className="font-medium text-sm">Offline</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Máy Docker */}
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground font-medium">Máy Docker</Label>
+                      <div className="font-medium text-sm min-h-[24px] flex items-center">
+                        {isCheckingDockerStatus ? (
+                          <span className="text-muted-foreground">Đang kiểm tra...</span>
+                        ) : dockerStatus?.controllerHost ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="break-all">{dockerStatus.controllerHost}</span>
+                          </div>
+                        ) : dockerServers.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="break-all">{dockerServers[0]?.ipAddress || "-"}</span>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Phiên bản Docker */}
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground font-medium">Phiên bản Docker</Label>
+                      <div className="font-medium min-h-[24px] flex items-center">
+                        {isCheckingDockerStatus ? (
+                          <Badge variant="outline" className="text-xs">Đang kiểm tra...</Badge>
+                        ) : dockerStatus ? (
+                          dockerStatus.installed ? (
+                            <Badge variant="default" className="text-xs">{dockerStatus.version || "Đã cài đặt"}</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">Chưa cài đặt</Badge>
+                          )
+                        ) : (
+                          <Badge variant="outline" className="text-xs">Chưa kiểm tra</Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Thao tác */}
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground font-medium">Thao tác</Label>
+                      <div className="flex items-start gap-2 flex-wrap min-h-[24px]">
+                        {dockerServers.length > 0 ? (
+                          dockerStatus?.installed ? (
+                            <>
+                              <Button
+                                onClick={handleUninstallDocker}
+                                disabled={isUninstallingDocker}
+                                variant="destructive"
+                                size="sm"
+                                className="h-8"
+                              >
+                                {isUninstallingDocker ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    <span className="text-xs">Đang gỡ...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">Gỡ</span>
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  // Cài đặt lại Docker (reinstall)
+                                  const dockerServer = pickDockerServer();
+                                  if (!dockerServer) {
+                                    toast.error("Chưa có server nào với role DOCKER. Vui lòng thêm server DOCKER trong trang Hosts.");
+                                    return;
+                                  }
+
+                                  if (dockerServer.status !== "online") {
+                                    toast.error(
+                                      `Máy Docker không online: ${dockerServer.ipAddress} (${dockerServer.role || "UNKNOWN"})`
+                                    );
+                                    return;
+                                  }
+
+                                  setPendingControllerHost(dockerServer.ipAddress);
+                                  setPendingServerId(parseInt(dockerServer.id));
+                                  setPendingAnsibleAction("reinstall-docker");
+                                  setShowSudoPasswordModal(true);
+                                }}
+                                disabled={isInstallingDocker}
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                              >
+                                {isInstallingDocker ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    <span className="text-xs">Đang cài lại...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RotateCcw className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">Cài lại</span>
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                onClick={() => handleCheckDockerStatus(false)}
+                                disabled={isCheckingDockerStatus}
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                              >
+                                {isCheckingDockerStatus ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    <span className="text-xs">Đang kiểm tra...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">Kiểm tra</span>
+                                  </>
+                                )}
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                onClick={handleInstallDocker}
+                                disabled={isInstallingDocker}
+                                size="sm"
+                                className="h-8"
+                              >
+                                {isInstallingDocker ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    <span className="text-xs">Đang cài đặt...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">Cài đặt</span>
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                onClick={() => handleCheckDockerStatus(false)}
+                                disabled={isCheckingDockerStatus}
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                              >
+                                {isCheckingDockerStatus ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    <span className="text-xs">Đang kiểm tra...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">Kiểm tra</span>
+                                  </>
+                                )}
+                              </Button>
+                            </>
+                          )
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tùy chọn - chỉ hiển thị khi Docker đã được cài đặt và có phiên bản */}
+                    {dockerStatus?.installed && dockerStatus?.version && (
+                      <div className="space-y-2 mt-4 pt-4 border-t col-span-full">
+                        <Label className="text-sm text-muted-foreground font-medium">Tùy chọn</Label>
+                        {/* Hiển thị thông tin đăng nhập nếu đã đăng nhập */}
+                        {dockerStatus?.loggedInUsername && (
+                          <div className="mb-2 p-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-md">
+                            <div className="flex items-center gap-2 text-sm">
+                              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              <span className="text-muted-foreground">Đã đăng nhập với tài khoản:</span>
+                              <span className="font-medium text-green-700 dark:text-green-300">{dockerStatus.loggedInUsername}</span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex items-start gap-2 flex-wrap">
+                          <Button
+                            onClick={handleTestDockerContainer}
+                            disabled={isTestingContainer}
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                          >
+                            {isTestingContainer ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                <span className="text-xs">Đang test...</span>
+                              </>
+                            ) : (
+                              <>
+                                <PlayCircle className="h-3 w-3 mr-1" />
+                                <span className="text-xs">Test container</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={handleCheckDockerPs}
+                            disabled={isCheckingDockerPs}
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                          >
+                            {isCheckingDockerPs ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                <span className="text-xs">Đang kiểm tra...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ServerIcon className="h-3 w-3 mr-1" />
+                                <span className="text-xs">Kiểm tra containers</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={handleListDockerImages}
+                            disabled={isListingDockerImages}
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                          >
+                            {isListingDockerImages ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                <span className="text-xs">Đang tải...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Package className="h-3 w-3 mr-1" />
+                                <span className="text-xs">Xem images</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              const dockerServer = pickDockerServer();
+                              if (!dockerServer) {
+                                toast.error("Chưa có server nào với role DOCKER.");
+                                return;
+                              }
+                              if (dockerServer.status !== "online") {
+                                toast.error(`Máy Docker không online: ${dockerServer.ipAddress}`);
+                                return;
+                              }
+                              setShowDockerLoginModal(true);
+                            }}
+                            disabled={isLoggingInDocker}
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                          >
+                            {isLoggingInDocker ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                <span className="text-xs">Đang đăng nhập...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldCheck className="h-3 w-3 mr-1" />
+                                <span className="text-xs">
+                                  {dockerStatus?.loggedInUsername ? "Đăng nhập lại" : "Đăng nhập Docker"}
+                                </span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+          </CardContent>
+        )}
+      </Card>
+
       {/* Sudo Password Modal */}
       <Dialog
         open={showSudoPasswordModal}
         onOpenChange={(open) => {
           // Chỉ cho phép đóng khi không đang xử lý
-          if (!open && !isInstallingAnsible && !isReinstallingAnsible && !isUninstallingAnsible) {
+          if (!open && !isInstallingAnsible && !isReinstallingAnsible && !isUninstallingAnsible && !isInstallingDocker && !isUninstallingDocker) {
             setShowSudoPasswordModal(false);
             setSudoPasswords({});
             setPendingAnsibleAction(null);
@@ -4877,6 +5927,24 @@ export function ClusterSetupAmd() {
                 <>
                   <Trash2 className="h-5 w-5" />
                   Gỡ Ansible
+                </>
+              )}
+              {pendingAnsibleAction === "install-docker" && (
+                <>
+                  <Package className="h-5 w-5" />
+                  Cài đặt Docker
+                </>
+              )}
+              {pendingAnsibleAction === "uninstall-docker" && (
+                <>
+                  <Trash2 className="h-5 w-5" />
+                  Gỡ Docker
+                </>
+              )}
+              {pendingAnsibleAction === "reinstall-docker" && (
+                <>
+                  <RotateCcw className="h-5 w-5" />
+                  Cài đặt lại Docker
                 </>
               )}
             </DialogTitle>
@@ -4940,7 +6008,7 @@ export function ClusterSetupAmd() {
             <div className="flex-1 flex flex-col border rounded-lg overflow-hidden bg-background min-h-0">
               <div className="flex items-center justify-between p-4 border-b">
                 <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${(isInstallingAnsible || isReinstallingAnsible || isUninstallingAnsible)
+                  <div className={`h-2 w-2 rounded-full ${(isInstallingAnsible || isReinstallingAnsible || isUninstallingAnsible || isInstallingDocker || isUninstallingDocker)
                     ? "bg-green-500 animate-pulse"
                     : "bg-gray-400"
                     }`}></div>
@@ -4948,18 +6016,26 @@ export function ClusterSetupAmd() {
                     {pendingAnsibleAction === "install" && "Cài đặt Ansible"}
                     {pendingAnsibleAction === "reinstall" && "Cài đặt lại Ansible"}
                     {pendingAnsibleAction === "uninstall" && "Gỡ Ansible"}
+                    {pendingAnsibleAction === "install-docker" && "Cài đặt Docker"}
+                    {pendingAnsibleAction === "uninstall-docker" && "Gỡ Docker"}
+                    {pendingAnsibleAction === "reinstall-docker" && "Cài đặt lại Docker"}
                   </span>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-6 min-h-0">
-                {ansibleOperationSteps.length === 0 ? (
+                {(ansibleOperationSteps.length === 0 && dockerOperationSteps.length === 0) ? (
                   <div className="text-muted-foreground italic flex flex-col items-center justify-center h-full gap-4">
                     <Info className="h-8 w-8 text-muted-foreground/50" />
-                    <p>Nhấn 'Xác nhận' để bắt đầu...</p>
+                    <p>
+                      {pendingAnsibleAction === "install-docker" && "Nhấn 'Cài đặt' để bắt đầu..."}
+                      {pendingAnsibleAction === "uninstall-docker" && "Nhấn 'Gỡ' để bắt đầu..."}
+                      {pendingAnsibleAction === "reinstall-docker" && "Nhấn 'Cài lại' để bắt đầu..."}
+                      {!["install-docker", "uninstall-docker", "reinstall-docker"].includes(pendingAnsibleAction || "") && "Nhấn nút bên dưới để bắt đầu..."}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {ansibleOperationSteps.map((step, index) => {
+                    {(ansibleOperationSteps.length > 0 ? ansibleOperationSteps : dockerOperationSteps).map((step, index) => {
                       const isRunning = step.status === "running";
                       const isCompleted = step.status === "completed";
                       const isError = step.status === "error";
@@ -5035,14 +6111,20 @@ export function ClusterSetupAmd() {
                     Đang xử lý, vui lòng đợi...
                   </span>
                 )}
-                {!isInstallingAnsible && !isReinstallingAnsible && !isUninstallingAnsible &&
-                  ansibleOperationSteps.length > 0 &&
-                  ansibleOperationSteps.every(s => s.status === "completed") && (
+                {!isInstallingAnsible && !isReinstallingAnsible && !isUninstallingAnsible && !isInstallingDocker && !isUninstallingDocker &&
+                  ((ansibleOperationSteps.length > 0 && ansibleOperationSteps.every(s => s.status === "completed")) ||
+                   (dockerOperationSteps.length > 0 && dockerOperationSteps.every(s => s.status === "completed"))) && (
                     <span className="flex items-center gap-2 text-green-600 dark:text-green-400">
                       <CheckCircle2 className="h-4 w-4" />
                       Hoàn tất!
                     </span>
                   )}
+                {(isInstallingDocker || isUninstallingDocker) && (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Đang xử lý, vui lòng đợi...
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
@@ -5061,55 +6143,303 @@ export function ClusterSetupAmd() {
                 disabled={
                   isInstallingAnsible ||
                   isReinstallingAnsible ||
-                  isUninstallingAnsible
+                  isUninstallingAnsible ||
+                  isInstallingDocker ||
+                  isUninstallingDocker
                 }
               >
                 {ansibleOperationSteps.length > 0 &&
-                  ansibleOperationSteps.every(s => s.status === "completed")
+                  (ansibleOperationSteps.length > 0 ? ansibleOperationSteps : dockerOperationSteps).every(s => s.status === "completed")
                   ? "Đóng"
                   : "Hủy"}
               </Button>
-              {!isInstallingAnsible && !isReinstallingAnsible && !isUninstallingAnsible && (
+              {!isInstallingAnsible && !isReinstallingAnsible && !isUninstallingAnsible && !isInstallingDocker && !isUninstallingDocker && (
                 <>
-                  {/* Hiển thị nút "Xác nhận" khi chưa bắt đầu */}
-                  {ansibleOperationSteps.length === 0 ||
-                    !ansibleOperationSteps.every(s => s.status === "completed") ? (
-                    <Button
-                      onClick={() => {
-                        if (pendingAnsibleAction === "install") {
-                          handleConfirmInstallAnsible();
-                        } else if (pendingAnsibleAction === "reinstall") {
-                          handleConfirmReinstallAnsible();
-                        } else if (pendingAnsibleAction === "uninstall") {
-                          handleConfirmUninstallAnsible();
-                        }
-                      }}
-                      disabled={
-                        serverAuthStatus?.needsPassword && !sudoPasswords[pendingControllerHost || ""]?.trim()
-                      }
-                    >
-                      Xác nhận
-                    </Button>
-                  ) : (
-                    /* Hiển thị nút "Đóng" khi đã hoàn tất */
-                    <Button
-                      onClick={() => {
-                        setShowSudoPasswordModal(false);
-                        setSudoPasswords({});
-                        setPendingAnsibleAction(null);
-                        setPendingControllerHost(null);
-                        setPendingServerId(null);
-                        setAnsibleOperationSteps([]);
-                        setCurrentStepIndex(-1);
-                        setServerAuthStatus(null);
-                      }}
-                    >
-                      Hoàn tất
-                    </Button>
-                  )}
+                  {/* Kiểm tra xem tất cả steps đã completed chưa */}
+                  {(() => {
+                    const allSteps = ansibleOperationSteps.length > 0 ? ansibleOperationSteps : dockerOperationSteps;
+                    const allCompleted = allSteps.length > 0 && allSteps.every(s => s.status === "completed");
+                    
+                    if (allCompleted) {
+                      // Hiển thị nút "Hoàn tất" khi đã hoàn tất
+                      return (
+                        <Button
+                          onClick={() => {
+                            setShowSudoPasswordModal(false);
+                            setSudoPasswords({});
+                            setPendingAnsibleAction(null);
+                            setPendingControllerHost(null);
+                            setPendingServerId(null);
+                            setAnsibleOperationSteps([]);
+                            setDockerOperationSteps([]);
+                            setCurrentStepIndex(-1);
+                            setServerAuthStatus(null);
+                          }}
+                        >
+                          Hoàn tất
+                        </Button>
+                      );
+                    } else {
+                      // Hiển thị nút với tên tương ứng khi chưa bắt đầu
+                      const getButtonText = () => {
+                        if (pendingAnsibleAction === "install") return "Cài đặt";
+                        if (pendingAnsibleAction === "reinstall") return "Cài lại";
+                        if (pendingAnsibleAction === "uninstall") return "Gỡ";
+                        if (pendingAnsibleAction === "install-docker") return "Cài đặt";
+                        if (pendingAnsibleAction === "uninstall-docker") return "Gỡ";
+                        if (pendingAnsibleAction === "reinstall-docker") return "Cài lại";
+                        return "Xác nhận";
+                      };
+                      
+                      return (
+                        <Button
+                          onClick={() => {
+                            if (pendingAnsibleAction === "install") {
+                              handleConfirmInstallAnsible();
+                            } else if (pendingAnsibleAction === "reinstall") {
+                              handleConfirmReinstallAnsible();
+                            } else if (pendingAnsibleAction === "uninstall") {
+                              handleConfirmUninstallAnsible();
+                            } else if (pendingAnsibleAction === "install-docker") {
+                              handleConfirmInstallDocker();
+                            } else if (pendingAnsibleAction === "uninstall-docker") {
+                              handleConfirmUninstallDocker();
+                            } else if (pendingAnsibleAction === "reinstall-docker") {
+                              handleConfirmReinstallDocker();
+                            }
+                          }}
+                          disabled={
+                            serverAuthStatus?.needsPassword && !sudoPasswords[pendingControllerHost || ""]?.trim()
+                          }
+                        >
+                          {getButtonText()}
+                        </Button>
+                      );
+                    }
+                  })()}
                 </>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Docker Login Modal */}
+      <Dialog open={showDockerLoginModal} onOpenChange={setShowDockerLoginModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Đăng nhập Docker Hub</DialogTitle>
+            <DialogDescription>
+              Nhập thông tin đăng nhập Docker Hub để có thể pull/push images
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="docker-username">Username</Label>
+              <Input
+                id="docker-username"
+                type="text"
+                placeholder="Docker Hub username"
+                value={dockerLoginUsername}
+                onChange={(e) => setDockerLoginUsername(e.target.value)}
+                disabled={isLoggingInDocker}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="docker-password">Password</Label>
+              <Input
+                id="docker-password"
+                type="password"
+                placeholder="Docker Hub password"
+                value={dockerLoginPassword}
+                onChange={(e) => setDockerLoginPassword(e.target.value)}
+                disabled={isLoggingInDocker}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && dockerLoginUsername.trim() && dockerLoginPassword.trim()) {
+                    handleDockerLogin();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDockerLoginModal(false);
+                setDockerLoginUsername("");
+                setDockerLoginPassword("");
+              }}
+              disabled={isLoggingInDocker}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleDockerLogin}
+              disabled={isLoggingInDocker || !dockerLoginUsername.trim() || !dockerLoginPassword.trim()}
+            >
+              {isLoggingInDocker ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang đăng nhập...
+                </>
+              ) : (
+                "Đăng nhập"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Test Container Output */}
+      <Dialog open={showTestContainerModal} onOpenChange={setShowTestContainerModal}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {testContainerSuccess ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500" />
+              )}
+              Kết quả Test Container
+            </DialogTitle>
+            <DialogDescription>
+              Output của lệnh: <code className="text-xs bg-muted px-1 py-0.5 rounded">docker run hello-world</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto mt-4">
+            <div
+              className={`p-4 rounded-lg border font-mono text-sm whitespace-pre-wrap break-words ${
+                testContainerSuccess
+                  ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+              }`}
+            >
+              {isTestingContainer ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Đang thực thi...</span>
+                </div>
+              ) : testContainerOutput ? (
+                testContainerOutput
+              ) : (
+                <span className="text-muted-foreground">Không có output</span>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowTestContainerModal(false);
+                setTestContainerOutput("");
+                setTestContainerSuccess(false);
+              }}
+            >
+              Đóng
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Docker PS Output */}
+      <Dialog open={showDockerPsModal} onOpenChange={setShowDockerPsModal}>
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {dockerPsSuccess ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500" />
+              )}
+              Kết quả Docker Containers
+            </DialogTitle>
+            <DialogDescription>
+              Output của lệnh: <code className="text-xs bg-muted px-1 py-0.5 rounded">docker ps</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto mt-4">
+            <div
+              className={`p-4 rounded-lg border font-mono text-sm whitespace-pre-wrap break-words ${
+                dockerPsSuccess
+                  ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+              }`}
+            >
+              {isCheckingDockerPs ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Đang kiểm tra...</span>
+                </div>
+              ) : dockerPsOutput ? (
+                dockerPsOutput
+              ) : (
+                <span className="text-muted-foreground">Không có output</span>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDockerPsModal(false);
+                setDockerPsOutput("");
+                setDockerPsSuccess(false);
+              }}
+            >
+              Đóng
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Docker Images Output */}
+      <Dialog open={showDockerImagesModal} onOpenChange={setShowDockerImagesModal}>
+        <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {dockerImagesSuccess ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500" />
+              )}
+              Danh sách Docker Images
+            </DialogTitle>
+            <DialogDescription>
+              Output của lệnh: <code className="text-xs bg-muted px-1 py-0.5 rounded">docker images</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto mt-4">
+            <div
+              className={`p-4 rounded-lg border font-mono text-sm whitespace-pre-wrap break-words ${
+                dockerImagesSuccess
+                  ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+              }`}
+            >
+              {isListingDockerImages ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Đang tải danh sách...</span>
+                </div>
+              ) : dockerImagesOutput ? (
+                dockerImagesOutput
+              ) : (
+                <span className="text-muted-foreground">Không có output</span>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDockerImagesModal(false);
+                setDockerImagesOutput("");
+                setDockerImagesSuccess(false);
+              }}
+            >
+              Đóng
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

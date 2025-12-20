@@ -39,6 +39,16 @@ public interface ServerService {
 
     String execCommand(Long id, String command, int timeoutMs, Consumer<String> outputHandler);
 
+    /**
+     * Thực thi lệnh với sudo password
+     * @param id ID của server
+     * @param command Lệnh cần thực thi
+     * @param sudoPassword Password cho sudo
+     * @param timeoutMs Timeout (milliseconds)
+     * @return Output của lệnh
+     */
+    String execCommandWithSudo(Long id, String command, String sudoPassword, int timeoutMs);
+
     String shutdownServer(Long id);
 
     String restartServer(Long id);

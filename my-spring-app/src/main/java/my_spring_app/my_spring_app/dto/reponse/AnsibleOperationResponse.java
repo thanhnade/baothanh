@@ -27,5 +27,10 @@ public class AnsibleOperationResponse {
      * Lỗi (nếu có)
      */
     private String error;
+    
+    /**
+     * Output của lệnh (nếu có)
+     */
+    private String output;
 }
 

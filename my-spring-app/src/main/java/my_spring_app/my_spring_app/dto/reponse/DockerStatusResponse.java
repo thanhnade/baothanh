@@ -32,6 +32,11 @@ public class DockerStatusResponse {
      * Thông báo lỗi nếu không tìm thấy server, server offline, hoặc Docker chưa cài.
      */
     private String error;
+    
+    /**
+     * Username đã đăng nhập Docker Hub (nếu có)
+     */
+    private String loggedInUsername;
 }
 
 
