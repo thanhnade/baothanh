@@ -13,7 +13,7 @@ import { adminAPI } from "@/lib/admin-api";
 import type { Node, Server } from "@/types/admin";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Loader2, Server as ServerIcon, Network, User, Lock, Settings, CheckCircle2, Search, Eye, FileText, Trash2, Terminal as TerminalIcon, PauseCircle, PlayCircle } from "lucide-react";
+import { RefreshCw, Loader2, Server as ServerIcon, Network, User, Lock, Settings, CheckCircle2, Search, Eye, FileText, Trash2, Terminal as TerminalIcon, PauseCircle, PlayCircle, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +36,8 @@ export function Nodes() {
   const [removingNode, setRemovingNode] = useState<string | null>(null); // Track node đang được gỡ khỏi cluster
   const [cordoningNode, setCordoningNode] = useState<string | null>(null); // Track node đang được cordon
   const [uncordoningNode, setUncordoningNode] = useState<string | null>(null); // Track node đang được uncordon
+  const [isCordonConfirmOpen, setIsCordonConfirmOpen] = useState(false); // Dialog xác nhận cordon
+  const [nodeToCordon, setNodeToCordon] = useState<Node | null>(null); // Node đang chờ xác nhận cordon
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTestingSsh, setIsTestingSsh] = useState(false);
@@ -789,8 +791,23 @@ export function Nodes() {
     }
   };
 
-  // Handler cordon node
+  // Handler cordon node - với cảnh báo nếu là master node
   const handleCordonNode = async (node: Node) => {
+    // Kiểm tra nếu là master node, hiển thị confirmation dialog
+    const isMasterNode = node.role?.toLowerCase() === "master";
+    
+    if (isMasterNode) {
+      setNodeToCordon(node);
+      setIsCordonConfirmOpen(true);
+      return;
+    }
+    
+    // Nếu không phải master, thực hiện cordon ngay
+    await performCordonNode(node);
+  };
+
+  // Thực hiện cordon node
+  const performCordonNode = async (node: Node) => {
     setCordoningNode(node.name);
     try {
       await adminAPI.cordonNode(node.name);
@@ -805,6 +822,21 @@ export function Nodes() {
     } finally {
       setCordoningNode(null);
     }
+  };
+
+  // Xác nhận cordon master node
+  const handleConfirmCordon = async () => {
+    if (nodeToCordon) {
+      setIsCordonConfirmOpen(false);
+      await performCordonNode(nodeToCordon);
+      setNodeToCordon(null);
+    }
+  };
+
+  // Hủy cordon master node
+  const handleCancelCordon = () => {
+    setIsCordonConfirmOpen(false);
+    setNodeToCordon(null);
   };
 
   // Handler uncordon node
@@ -1959,6 +1991,59 @@ export function Nodes() {
           }}
         />
       )}
+
+      {/* Confirmation Dialog cho Cordon Master Node */}
+      <Dialog open={isCordonConfirmOpen} onOpenChange={setIsCordonConfirmOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
+              Cảnh báo: Cordon Master Node
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Bạn có chắc chắn muốn ngừng nhận Pods cho Master Node này?
+            </DialogDescription>
+          </DialogHeader>
+          {nodeToCordon && (
+            <div className="py-4 space-y-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                  <div className="flex-1 space-y-2">
+                    <p className="text-sm font-medium text-amber-900">
+                      Master Node: <span className="font-semibold">{nodeToCordon.name}</span>
+                    </p>
+                    <div className="text-sm text-amber-800 space-y-1">
+                      <p className="font-medium">⚠️ Lưu ý quan trọng:</p>
+                      <ul className="list-disc list-inside space-y-1 ml-2">
+                        <li>Master Node chạy các system pods quan trọng (etcd, kube-apiserver, kube-controller-manager, kube-scheduler)</li>
+                        <li>Cordon Master Node sẽ ngăn các pods mới được schedule vào node này</li>
+                        <li>Pods hiện có vẫn tiếp tục chạy, nhưng không có pods mới nào được tạo trên node này</li>
+                        <li>Hành động này có thể ảnh hưởng đến hoạt động của cluster nếu không cẩn thận</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4" />
+                <span>Chỉ thực hiện khi bạn chắc chắn về mục đích bảo trì hoặc cấu hình.</span>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={handleCancelCordon}>
+              Hủy
+            </Button>
+            <Button
+              onClick={handleConfirmCordon}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Xác nhận Cordon
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

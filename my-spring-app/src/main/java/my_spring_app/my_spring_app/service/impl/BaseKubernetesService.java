@@ -59,6 +59,7 @@ public abstract class BaseKubernetesService {
                         break;
                     }
                     output.append(new String(buffer, 0, bytesRead, StandardCharsets.UTF_8));
+                    System.out.println("[executeCommand] Output: " + new String(buffer, 0, bytesRead, StandardCharsets.UTF_8));
                 }
 
                 if (channelExec.isClosed()) {
