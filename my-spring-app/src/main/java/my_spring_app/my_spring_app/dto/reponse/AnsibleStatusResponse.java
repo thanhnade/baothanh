@@ -11,7 +11,7 @@ public class AnsibleStatusResponse {
     private Boolean installed;
     private String version;
     private String controllerHost;
-    private String controllerRole; // "ANSIBLE" or "MASTER"
+    private String controllerRole; // "ANSIBLE"
     private String error;
 }
 

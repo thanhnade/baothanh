@@ -60,6 +60,7 @@ export type Node = {
   }>;
   yaml?: string;
   notAssignAction?: "ASSIGN" | "JOIN_K8S"; // "ASSIGN" khi status = "NOT_ASSIGN", "JOIN_K8S" khi status = "NOT_JOIN_K8S"
+  unschedulable?: boolean; // true nếu node đã bị cordon (không nhận pods mới)
 };
 
 // Namespace

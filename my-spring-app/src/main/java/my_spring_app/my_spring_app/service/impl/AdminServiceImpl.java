@@ -2459,7 +2459,9 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
             DashboardMetricsResponse response = new DashboardMetricsResponse();
             
             // Bước 1: Lấy thông tin Nodes
-            // Đồng bộ với getNodes(): Đếm tất cả servers có clusterStatus=AVAILABLE (không chỉ nodes đã join K8s)
+            // Đồng bộ với getNodes(): Đếm tất cả nodes (từ K8s + servers chưa join K8s)
+            // Healthy = nodes có status "ready"
+            // Unhealthy = nodes có status "notready", "NOT_JOIN_K8S", hoặc "NOT_ASSIGN"
             try {
                 // Lấy danh sách servers đã được gán vào cluster (clusterStatus = "AVAILABLE")
                 List<ServerEntity> clusterServers = serverRepository.findAllByClusterStatusIgnoreCase("AVAILABLE")
@@ -2475,12 +2477,19 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
                 Map<String, Boolean> nodeReadyMap = new HashMap<>(); // nodeName/IP -> isReady
                 Set<String> k8sNodeNames = new HashSet<>();
                 Set<String> k8sNodeIps = new HashSet<>();
+                Set<String> k8sServerIps = new HashSet<>(); // Track IPs của nodes từ K8s
+                
+                // Đếm nodes từ K8s (bao gồm cả NOT_ASSIGN)
+                int k8sNodesCount = 0;
+                int k8sHealthyNodes = 0;
+                int k8sUnhealthyNodes = 0;
                 
                 if (nodeList != null && nodeList.getItems() != null) {
                     for (V1Node v1Node : nodeList.getItems()) {
                         if (v1Node.getMetadata() != null && v1Node.getMetadata().getName() != null) {
                             String nodeName = v1Node.getMetadata().getName().toLowerCase();
                             k8sNodeNames.add(nodeName);
+                            k8sNodesCount++;
                             
                             // Kiểm tra Ready status
                             boolean isReady = false;
@@ -2499,45 +2508,85 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
                             // Lấy IP từ node addresses
                             if (status != null && status.getAddresses() != null) {
                                 for (io.kubernetes.client.openapi.models.V1NodeAddress address : status.getAddresses()) {
-                                    if (address != null && "InternalIP".equals(address.getType()) && address.getAddress() != null) {
-                                        k8sNodeIps.add(address.getAddress().trim());
-                                        nodeReadyMap.put(address.getAddress().trim(), isReady);
+                                    if (address != null && address.getAddress() != null) {
+                                        String ip = address.getAddress().trim();
+                                        if ("InternalIP".equals(address.getType())) {
+                                            k8sNodeIps.add(ip);
+                                            nodeReadyMap.put(ip, isReady);
+                                        }
+                                        k8sServerIps.add(ip);
+                                        // Nếu là IPv6 hoặc có port, thêm phần IPv4
+                                        if (ip.contains(":")) {
+                                            String ipv4 = ip.split(":")[0];
+                                            k8sServerIps.add(ipv4);
+                                        }
                                     }
                                 }
+                            }
+                            
+                            // Kiểm tra xem node này có server tương ứng với clusterStatus=AVAILABLE không
+                            boolean hasAssignedServer = false;
+                            for (ServerEntity server : clusterServers) {
+                                boolean matchByName = server.getName() != null && 
+                                        server.getName().toLowerCase().equals(nodeName);
+                                boolean matchByIp = false;
+                                if (status != null && status.getAddresses() != null) {
+                                    for (io.kubernetes.client.openapi.models.V1NodeAddress address : status.getAddresses()) {
+                                        if (address != null && "InternalIP".equals(address.getType()) 
+                                                && address.getAddress() != null 
+                                                && server.getIp() != null
+                                                && address.getAddress().trim().equals(server.getIp().trim())) {
+                                            matchByIp = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (matchByName || matchByIp) {
+                                    hasAssignedServer = true;
+                                    break;
+                                }
+                            }
+                            
+                            // Nếu node có trong K8s và Ready và có server assigned -> healthy
+                            // Nếu node có trong K8s nhưng NotReady hoặc không có server assigned -> unhealthy
+                            if (isReady && hasAssignedServer) {
+                                k8sHealthyNodes++;
+                            } else {
+                                k8sUnhealthyNodes++; // Bao gồm: NotReady, NOT_ASSIGN
                             }
                         }
                     }
                 }
                 
-                // Đếm nodes: Đếm tất cả servers đã assign vào cluster
-                int totalNodes = clusterServers.size();
-                int healthyNodes = 0;
-                int unhealthyNodes = 0;
-                
+                // Đếm servers đã assign vào cluster nhưng chưa join K8s (NOT_JOIN_K8S)
+                int notJoinK8sCount = 0;
                 for (ServerEntity server : clusterServers) {
-                    boolean isNodeReady = false;
                     boolean foundInK8s = false;
                     
-                    // Kiểm tra xem server đã join K8s chưa
+                    // Kiểm tra theo tên server (so sánh case-insensitive)
                     if (server.getName() != null && k8sNodeNames.contains(server.getName().toLowerCase())) {
                         foundInK8s = true;
-                        isNodeReady = nodeReadyMap.getOrDefault(server.getName().toLowerCase(), false);
-                    } else if (server.getIp() != null && k8sNodeIps.contains(server.getIp().trim())) {
-                        foundInK8s = true;
-                        isNodeReady = nodeReadyMap.getOrDefault(server.getIp().trim(), false);
                     }
                     
-                    // Nếu đã join K8s và Ready -> healthy
-                    // Nếu chưa join K8s hoặc NotReady -> unhealthy
-                    if (foundInK8s && isNodeReady) {
-                        healthyNodes++;
-                    } else {
-                        unhealthyNodes++; // Bao gồm: NotReady, NOT_JOIN_K8S, NOT_ASSIGN
+                    // Kiểm tra theo IP (nếu chưa tìm thấy theo tên)
+                    if (!foundInK8s && server.getIp() != null && k8sServerIps.contains(server.getIp().trim())) {
+                        foundInK8s = true;
+                    }
+                    
+                    // Nếu server chưa có trong K8s -> NOT_JOIN_K8S (unhealthy)
+                    if (!foundInK8s) {
+                        notJoinK8sCount++;
                     }
                 }
                 
+                // Tổng hợp: Total = nodes từ K8s + servers chưa join K8s
+                int totalNodes = k8sNodesCount + notJoinK8sCount;
+                int healthyNodes = k8sHealthyNodes;
+                int unhealthyNodes = k8sUnhealthyNodes + notJoinK8sCount; // Bao gồm: NotReady, NOT_ASSIGN, NOT_JOIN_K8S
+                
                 response.setNodes(new DashboardMetricsResponse.NodeMetrics(totalNodes, healthyNodes, unhealthyNodes));
-                System.out.println("[AdminService] getDashboardMetrics() - Nodes: total=" + totalNodes + ", healthy=" + healthyNodes + ", unhealthy=" + unhealthyNodes);
+                System.out.println("[AdminService] getDashboardMetrics() - Nodes: total=" + totalNodes + " (K8s=" + k8sNodesCount + ", NOT_JOIN_K8S=" + notJoinK8sCount + "), healthy=" + healthyNodes + ", unhealthy=" + unhealthyNodes);
             } catch (Exception e) {
                 System.out.println("[AdminService] getDashboardMetrics() - Error getting nodes: " + e.getMessage());
                 // Nếu lỗi, set giá trị mặc định
@@ -3035,6 +3084,27 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
                 System.out.println("[AdminService] joinNodeToK8s() - Warning: Khong the clean up hoan toan (co the khong co quyen): " + e.getMessage());
             }
             
+            // Bước 3.6: Đặt lại hostname theo CSDL
+            System.out.println("[AdminService] joinNodeToK8s() - Dat lai hostname theo CSDL...");
+            String hostname = workerServer.getName() != null ? workerServer.getName() : ("server-" + serverId);
+            try {
+                // Set hostname hiện tại
+                executeCommand(workerSession, "sudo hostnamectl set-hostname " + hostname, false);
+                // Cập nhật /etc/hostname để hostname persist sau khi reboot
+                executeCommand(workerSession, "echo '" + hostname + "' | sudo tee /etc/hostname", false);
+                // Cập nhật /etc/hosts để đảm bảo hostname resolve đúng (thêm entry nếu chưa có)
+                if (workerServer.getIp() != null && !workerServer.getIp().trim().isEmpty()) {
+                    String hostEntry = workerServer.getIp().trim() + " " + hostname;
+                    // Xóa entry cũ nếu có (tránh duplicate)
+                    executeCommand(workerSession, "sudo sed -i '/\\b" + hostname + "\\b/d' /etc/hosts || true", true);
+                    // Thêm entry mới
+                    executeCommand(workerSession, "echo '" + hostEntry + "' | sudo tee -a /etc/hosts", false);
+                }
+                System.out.println("[AdminService] joinNodeToK8s() - Da dat hostname: " + hostname);
+            } catch (Exception e) {
+                System.out.println("[AdminService] joinNodeToK8s() - Warning: Khong the dat hostname (co the khong co quyen): " + e.getMessage());
+            }
+            
             // Bước 4: Cấu hình kernel và sysctl (theo playbook)
             System.out.println("[AdminService] joinNodeToK8s() - Cau hinh kernel va sysctl...");
             
@@ -3407,6 +3477,112 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
     }
 
     /**
+     * Cordon node - đánh dấu node không schedulable (ngăn pods mới được schedule vào node).
+     * 
+     * @param nodeName Tên của node cần cordon
+     * @throws RuntimeException nếu không tìm thấy master server, không thể kết nối, hoặc lỗi khi cordon
+     */
+    @Override
+    public void cordonNode(String nodeName) {
+        System.out.println("[AdminService] cordonNode() - Bắt đầu cordon node: " + nodeName);
+        
+        Session masterSession = null;
+        try {
+            // Bước 1: Tìm master server
+            ServerEntity masterServer = serverRepository.findByRole("MASTER")
+                    .orElseThrow(() -> new RuntimeException(
+                            "Không tìm thấy server MASTER. Vui lòng cấu hình server MASTER trong hệ thống."));
+
+            System.out.println("[AdminService] cordonNode() - Kết nối SSH đến master server: " + masterServer.getName());
+            masterSession = createSession(masterServer);
+
+            // Bước 2: Kiểm tra node có tồn tại trong cluster không
+            String checkNodeCmd = "kubectl get node " + nodeName;
+            try {
+                String checkResult = executeCommand(masterSession, checkNodeCmd, true);
+                if (checkResult == null || checkResult.trim().isEmpty() || checkResult.contains("NotFound")) {
+                    throw new RuntimeException("Node '" + nodeName + "' không tồn tại trong cluster");
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Không thể kiểm tra node '" + nodeName + "': " + e.getMessage());
+            }
+
+            // Bước 3: Cordon node
+            System.out.println("[AdminService] cordonNode() - Đang cordon node: " + nodeName);
+            String cordonCmd = "kubectl cordon " + nodeName;
+            try {
+                String cordonResult = executeCommand(masterSession, cordonCmd, true);
+                System.out.println("[AdminService] cordonNode() - Cordon result: " + cordonResult);
+            } catch (Exception e) {
+                throw new RuntimeException("Không thể cordon node '" + nodeName + "': " + e.getMessage(), e);
+            }
+
+            System.out.println("[AdminService] cordonNode() - Đã cordon node thành công: " + nodeName);
+
+        } catch (Exception e) {
+            System.out.println("[AdminService] cordonNode() - Lỗi: " + e.getMessage());
+            throw new RuntimeException("Không thể cordon node '" + nodeName + "': " + e.getMessage(), e);
+        } finally {
+            if (masterSession != null && masterSession.isConnected()) {
+                masterSession.disconnect();
+            }
+        }
+    }
+
+    /**
+     * Uncordon node - bỏ đánh dấu unschedulable, cho phép pods mới được schedule vào node.
+     * 
+     * @param nodeName Tên của node cần uncordon
+     * @throws RuntimeException nếu không tìm thấy master server, không thể kết nối, hoặc lỗi khi uncordon
+     */
+    @Override
+    public void uncordonNode(String nodeName) {
+        System.out.println("[AdminService] uncordonNode() - Bắt đầu uncordon node: " + nodeName);
+        
+        Session masterSession = null;
+        try {
+            // Bước 1: Tìm master server
+            ServerEntity masterServer = serverRepository.findByRole("MASTER")
+                    .orElseThrow(() -> new RuntimeException(
+                            "Không tìm thấy server MASTER. Vui lòng cấu hình server MASTER trong hệ thống."));
+
+            System.out.println("[AdminService] uncordonNode() - Kết nối SSH đến master server: " + masterServer.getName());
+            masterSession = createSession(masterServer);
+
+            // Bước 2: Kiểm tra node có tồn tại trong cluster không
+            String checkNodeCmd = "kubectl get node " + nodeName;
+            try {
+                String checkResult = executeCommand(masterSession, checkNodeCmd, true);
+                if (checkResult == null || checkResult.trim().isEmpty() || checkResult.contains("NotFound")) {
+                    throw new RuntimeException("Node '" + nodeName + "' không tồn tại trong cluster");
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Không thể kiểm tra node '" + nodeName + "': " + e.getMessage());
+            }
+
+            // Bước 3: Uncordon node
+            System.out.println("[AdminService] uncordonNode() - Đang uncordon node: " + nodeName);
+            String uncordonCmd = "kubectl uncordon " + nodeName;
+            try {
+                String uncordonResult = executeCommand(masterSession, uncordonCmd, true);
+                System.out.println("[AdminService] uncordonNode() - Uncordon result: " + uncordonResult);
+            } catch (Exception e) {
+                throw new RuntimeException("Không thể uncordon node '" + nodeName + "': " + e.getMessage(), e);
+            }
+
+            System.out.println("[AdminService] uncordonNode() - Đã uncordon node thành công: " + nodeName);
+
+        } catch (Exception e) {
+            System.out.println("[AdminService] uncordonNode() - Lỗi: " + e.getMessage());
+            throw new RuntimeException("Không thể uncordon node '" + nodeName + "': " + e.getMessage(), e);
+        } finally {
+            if (masterSession != null && masterSession.isConnected()) {
+                masterSession.disconnect();
+            }
+        }
+    }
+
+    /**
      * Lấy chi tiết một node cụ thể theo tên, bao gồm đầy đủ thông tin: pods, labels, yaml.
      * 
      * @param name Tên của node cần lấy chi tiết
@@ -3760,6 +3936,13 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
             node.setUpdatedAt(v1Node.getMetadata().getCreationTimestamp().toString());
         } else {
             node.setUpdatedAt("");
+        }
+        
+        // Unschedulable từ spec (cordon status)
+        if (v1Node.getSpec() != null && v1Node.getSpec().getUnschedulable() != null) {
+            node.setUnschedulable(v1Node.getSpec().getUnschedulable());
+        } else {
+            node.setUnschedulable(false);
         }
     }
 

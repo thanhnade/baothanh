@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Power, PowerOff, RotateCcw, Wifi, WifiOff, Server as ServerIcon, Network, User, Lock, Settings, CheckCircle2, RefreshCw, Terminal as TerminalIcon, Search, MoreVertical, Pencil, Trash2, Laptop } from "lucide-react";
+import { Loader2, Power, PowerOff, RotateCcw, Wifi, WifiOff, Server as ServerIcon, Network, User, Lock, Settings, CheckCircle2, RefreshCw, Terminal as TerminalIcon, Search, MoreVertical, Pencil, Trash2, Laptop, UserRoundIcon } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Terminal } from "@/components/common/Terminal";
 
@@ -1016,7 +1016,7 @@ export function Servers() {
             <div className="space-y-2 flex-shrink-0">
               <Label htmlFor="name" className="text-sm font-medium flex items-center gap-2">
                 <ServerIcon className="h-3.5 w-3.5" />
-                Tên Host <span className="text-destructive">*</span>
+                Host Name <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="name"
@@ -1041,7 +1041,7 @@ export function Servers() {
                 </TabsTrigger>
                 <TabsTrigger value="configuration" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  K8S Roles
+                  Vai trò
                 </TabsTrigger>
               </TabsList>
 

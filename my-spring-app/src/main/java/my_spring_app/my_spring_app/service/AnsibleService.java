@@ -16,7 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface AnsibleService {
     /**
-     * Kiểm tra trạng thái Ansible trên controller server (server có role ANSIBLE hoặc MASTER).
+     * Kiểm tra trạng thái Ansible trên controller server (server có role ANSIBLE).
      * 
      * @return AnsibleStatusResponse chứa thông tin trạng thái Ansible (installed, version, controllerHost, controllerRole)
      */

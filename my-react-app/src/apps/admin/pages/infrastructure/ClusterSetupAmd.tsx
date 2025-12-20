@@ -344,7 +344,7 @@ export function ClusterSetupAmd() {
     installed: boolean;
     version?: string;
     controllerHost?: string;
-    controllerRole?: "ANSIBLE" | "MASTER";
+    controllerRole?: "ANSIBLE";
     error?: string;
   } | null>(null);
 
@@ -1223,13 +1223,11 @@ export function ClusterSetupAmd() {
   // Helper: chọn controller server
   // Ưu tiên: ANSIBLE online -> MASTER online -> ANSIBLE bất kỳ -> MASTER bất kỳ
   const pickControllerServer = () => {
+    // Chỉ sử dụng máy với role ANSIBLE, không fallback sang MASTER
     const onlineAnsible = ansibleServers.filter((s) => s.status === "online");
-    const onlineMasters = masterServers.filter((s) => s.status === "online");
 
     if (onlineAnsible.length > 0) return onlineAnsible[0];
-    if (onlineMasters.length > 0) return onlineMasters[0];
     if (ansibleServers.length > 0) return ansibleServers[0];
-    if (masterServers.length > 0) return masterServers[0];
     return null;
   };
 
@@ -1255,7 +1253,11 @@ export function ClusterSetupAmd() {
       // Không gửi controllerHost, để backend tự động tìm controller server
       const status = await adminAPI.checkAnsibleStatus();
       // Luôn cập nhật status, kể cả khi có error
-      setAnsibleStatus(status);
+      // Chỉ chấp nhận controllerRole là "ANSIBLE", không chấp nhận "MASTER"
+      setAnsibleStatus({
+        ...status,
+        controllerRole: status.controllerRole === "ANSIBLE" ? "ANSIBLE" : undefined,
+      });
 
       // Chỉ hiển thị toast nếu không phải silent mode
       if (!silent) {
@@ -1289,7 +1291,7 @@ export function ClusterSetupAmd() {
   const handleInstallAnsible = () => {
     const controllerServer = pickControllerServer();
     if (!controllerServer) {
-      toast.error("Chưa có server nào với role ANSIBLE hoặc MASTER. Vui lòng cấu hình server trước.");
+      toast.error("Chưa có server nào với role ANSIBLE. Vui lòng cấu hình server trước.");
       return;
     }
 
@@ -1351,7 +1353,11 @@ export function ClusterSetupAmd() {
       setTimeout(async () => {
         try {
           const status = await adminAPI.checkAnsibleStatus();
-          setAnsibleStatus(status);
+          // Chỉ chấp nhận controllerRole là "ANSIBLE", không chấp nhận "MASTER"
+          setAnsibleStatus({
+            ...status,
+            controllerRole: status.controllerRole === "ANSIBLE" ? "ANSIBLE" : undefined,
+          });
           if (status.installed) {
             toast.success(`Cài đặt Ansible hoàn tất! Phiên bản: ${status.version || "Unknown"}`);
           }
@@ -1377,7 +1383,7 @@ export function ClusterSetupAmd() {
   const handleReinstallAnsible = () => {
     const controllerServer = pickControllerServer();
     if (!controllerServer) {
-      toast.error("Không tìm thấy máy controller (ANSIBLE hoặc MASTER).");
+      toast.error("Không tìm thấy máy controller (ANSIBLE).");
       return;
     }
 
@@ -1427,7 +1433,11 @@ export function ClusterSetupAmd() {
       setTimeout(async () => {
         try {
           const status = await adminAPI.checkAnsibleStatus();
-          setAnsibleStatus(status);
+          // Chỉ chấp nhận controllerRole là "ANSIBLE", không chấp nhận "MASTER"
+          setAnsibleStatus({
+            ...status,
+            controllerRole: status.controllerRole === "ANSIBLE" ? "ANSIBLE" : undefined,
+          });
           if (status.installed) {
             toast.success(`Cài đặt lại Ansible hoàn tất! Phiên bản: ${status.version || "Unknown"}`);
           }
@@ -1453,7 +1463,7 @@ export function ClusterSetupAmd() {
   const handleUninstallAnsible = () => {
     const controllerServer = pickControllerServer();
     if (!controllerServer) {
-      toast.error("Không tìm thấy máy controller (ANSIBLE hoặc MASTER).");
+      toast.error("Không tìm thấy máy controller (ANSIBLE).");
       return;
     }
 
@@ -1513,7 +1523,11 @@ export function ClusterSetupAmd() {
       setTimeout(async () => {
         try {
           const status = await adminAPI.checkAnsibleStatus();
-          setAnsibleStatus(status);
+          // Chỉ chấp nhận controllerRole là "ANSIBLE", không chấp nhận "MASTER"
+          setAnsibleStatus({
+            ...status,
+            controllerRole: status.controllerRole === "ANSIBLE" ? "ANSIBLE" : undefined,
+          });
           toast.success("Gỡ Ansible hoàn tất!");
         } catch (error) {
           // Nếu không kiểm tra được, cập nhật status thủ công
@@ -1521,7 +1535,7 @@ export function ClusterSetupAmd() {
             installed: false,
             version: undefined,
             controllerHost: pendingControllerHost,
-            controllerRole: (pickControllerServer()?.role as "ANSIBLE" | "MASTER" | undefined) ?? undefined,
+            controllerRole: (pickControllerServer()?.role === "ANSIBLE" ? "ANSIBLE" : undefined) ?? undefined,
           });
           toast.success("Gỡ Ansible hoàn tất!");
         }

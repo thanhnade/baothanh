@@ -318,6 +318,7 @@ export const adminAPI = {
       pods: node.pods || [],
       yaml: node.yaml || "",
       notAssignAction: node.notAssignAction || undefined,
+      unschedulable: node.unschedulable || false,
     }));
   },
   joinNodeToK8s: async (serverId: string): Promise<void> => {
@@ -328,6 +329,12 @@ export const adminAPI = {
       ? `/admin/cluster/nodes/${nodeName}?ip=${encodeURIComponent(ip)}`
       : `/admin/cluster/nodes/${nodeName}`;
     await api.delete(url);
+  },
+  cordonNode: async (nodeName: string): Promise<void> => {
+    await api.post(`/admin/cluster/nodes/${nodeName}/cordon`);
+  },
+  uncordonNode: async (nodeName: string): Promise<void> => {
+    await api.post(`/admin/cluster/nodes/${nodeName}/uncordon`);
   },
   getNode: async (id: string): Promise<Node> => {
     const response = await api.get(`/admin/cluster/nodes/${id}`);
@@ -365,6 +372,7 @@ export const adminAPI = {
       pods: node.pods || [],
       yaml: node.yaml || "",
       notAssignAction: node.notAssignAction || undefined,
+      unschedulable: node.unschedulable || false,
     };
   },
 

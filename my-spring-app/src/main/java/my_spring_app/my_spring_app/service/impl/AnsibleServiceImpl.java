@@ -140,14 +140,14 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
             // Nếu không tìm thấy server với role ANSIBLE
             if (controllerServer == null) {
                 response.setInstalled(false);
-                response.setError("Không tìm thấy server với role ANSIBLE. Vui lòng thêm server với role ANSIBLE trong trang Servers.");
+                response.setError("Không tìm thấy host với role ANSIBLE. Vui lòng thêm host với role ANSIBLE trong trang Hosts.");
                 return response;
             }
             
             // Bước 2: Kiểm tra server ANSIBLE có online không
             if (controllerServer.getStatus() != ServerEntity.ServerStatus.ONLINE) {
                 response.setInstalled(false);
-                response.setError("Server với role ANSIBLE (IP: " + controllerServer.getIp() + ") đang offline. Vui lòng đảm bảo server đang online.");
+                response.setError("Host với role ANSIBLE (IP: " + controllerServer.getIp() + ") đang offline. Vui lòng đảm bảo host đang online.");
                 // Vẫn set thông tin controller để frontend có thể hiển thị
                 response.setControllerHost(controllerServer.getIp());
                 response.setControllerRole(controllerServer.getRole());
@@ -233,7 +233,7 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
             
             // Bước 1: Cập nhật các gói hệ thống
             System.out.println("[INSTALL ANSIBLE] Bước 1/4: Cập nhật package manager...");
-            String updateCmd = "apt update -y";
+            String updateCmd = "sudo apt update -y";
             String updateResult = executeCommandWithAuth(serverId, updateCmd, sudoPassword, 30000);
             System.out.println("[INSTALL ANSIBLE] ✓ Đã cập nhật package manager");
             if (updateResult != null && !updateResult.trim().isEmpty()) {
@@ -242,7 +242,7 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
             
             // Bước 2: Cài đặt Python và pip
             System.out.println("[INSTALL ANSIBLE] Bước 2/4: Cài đặt Python và pip...");
-            String pythonCmd = "apt install -y python3 python3-pip python3-venv";
+            String pythonCmd = "sudo apt install -y python3 python3-pip python3-venv";
             String pythonResult = executeCommandWithAuth(serverId, pythonCmd, sudoPassword, 30000);
             System.out.println("[INSTALL ANSIBLE] ✓ Đã cài đặt Python và pip");
             if (pythonResult != null && !pythonResult.trim().isEmpty()) {
@@ -251,7 +251,7 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
             
             // Bước 3: Cài đặt Ansible
             System.out.println("[INSTALL ANSIBLE] Bước 3/4: Cài đặt Ansible...");
-            String ansibleCmd = "pip3 install --upgrade ansible";
+            String ansibleCmd = "sudo pip3 install --upgrade ansible";
             String ansibleResult = executeCommandWithAuth(serverId, ansibleCmd, sudoPassword, 60000);
             System.out.println("[INSTALL ANSIBLE] ✓ Đã cài đặt Ansible");
             if (ansibleResult != null && !ansibleResult.trim().isEmpty()) {
@@ -480,34 +480,32 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
     
     /**
      * Tìm controller server theo host hoặc tự động tìm
+     * Chỉ tìm server với role ANSIBLE, không fallback sang MASTER
      */
     private ServerEntity findControllerServer(String controllerHost) {
         List<ServerEntity> allServers = serverRepository.findAll();
         
-        // Nếu có controllerHost, tìm theo IP
+        // Nếu có controllerHost, tìm theo IP và đảm bảo role là ANSIBLE
         if (controllerHost != null && !controllerHost.trim().isEmpty()) {
-            return allServers.stream()
+            ServerEntity server = allServers.stream()
                     .filter(s -> s != null && controllerHost.equals(s.getIp()))
                     .findFirst()
                     .orElse(null);
+            
+            // Kiểm tra server tìm được có role ANSIBLE không
+            if (server != null && !"ANSIBLE".equals(server.getRole())) {
+                return null; // Không phải ANSIBLE, trả về null
+            }
+            return server;
         }
         
-        // Tự động tìm: ưu tiên ANSIBLE, sau đó MASTER
+        // Tự động tìm: chỉ tìm server với role ANSIBLE
         ServerEntity controllerServer = allServers.stream()
                 .filter(s -> s != null 
                         && "ANSIBLE".equals(s.getRole())
                         && s.getStatus() == ServerEntity.ServerStatus.ONLINE)
                 .findFirst()
                 .orElse(null);
-        
-        if (controllerServer == null) {
-            controllerServer = allServers.stream()
-                    .filter(s -> s != null 
-                            && "MASTER".equals(s.getRole())
-                            && s.getStatus() == ServerEntity.ServerStatus.ONLINE)
-                    .findFirst()
-                    .orElse(null);
-        }
         
         return controllerServer;
     }
@@ -892,7 +890,7 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
                 taskStatus.markFailed("Không có server nào để phân phối SSH key");
                 return;
             }
-            taskStatus.appendLog("Số server mục tiêu: " + targetServers.size() + "\n");
+            taskStatus.appendLog("Số host mục tiêu: " + targetServers.size() + "\n");
             taskStatus.setProgress(10);
             
             String ensureKeyCmd = "bash -lc 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && [ -f ~/.ssh/id_rsa.pub ] || ssh-keygen -t rsa -b 2048 -N \"\" -f ~/.ssh/id_rsa -q'";

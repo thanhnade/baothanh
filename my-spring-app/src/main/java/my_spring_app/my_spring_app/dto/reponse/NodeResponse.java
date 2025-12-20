@@ -29,6 +29,7 @@ public class NodeResponse {
     private List<NodePod> pods;
     private String yaml;
     private String notAssignAction; // "ASSIGN" hoặc "JOIN_K8S" - chỉ có khi status = "NOT_ASSIGN"
+    private Boolean unschedulable; // true nếu node đã bị cordon (không nhận pods mới)
 
     @Data
     @NoArgsConstructor

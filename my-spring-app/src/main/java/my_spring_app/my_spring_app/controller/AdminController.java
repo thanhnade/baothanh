@@ -222,6 +222,34 @@ public class AdminController {
         }
     }
 
+    @PostMapping("/cluster/nodes/{nodeName}/cordon")
+    public ResponseEntity<?> cordonNode(@PathVariable String nodeName) {
+        try {
+            adminService.cordonNode(nodeName);
+            return ResponseEntity.ok(Map.of("message", "Đã cordon node thành công"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "CORDON_ERROR", "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "INTERNAL_ERROR", "message", "Lỗi khi cordon node: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/cluster/nodes/{nodeName}/uncordon")
+    public ResponseEntity<?> uncordonNode(@PathVariable String nodeName) {
+        try {
+            adminService.uncordonNode(nodeName);
+            return ResponseEntity.ok(Map.of("message", "Đã uncordon node thành công"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "UNCORDON_ERROR", "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "INTERNAL_ERROR", "message", "Lỗi khi uncordon node: " + e.getMessage()));
+        }
+    }
+
     // Cluster & Overview  - Namespaces
     @GetMapping("/cluster/namespaces")
     public ResponseEntity<NamespaceListResponse> getNamespaces() {

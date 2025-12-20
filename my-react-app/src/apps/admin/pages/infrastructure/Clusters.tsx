@@ -134,7 +134,7 @@ export function Clusters() {
 
     // Chỉ cho phép chọn server có role MASTER hoặc WORKER
     if (!canAssignServerToCluster(server)) {
-      toast.error(`Server ${server.name} có role ${server.role} không thể được gán vào cluster. Chỉ có MASTER và WORKER mới được phép.`);
+      toast.error(`Host ${server.name} có role ${server.role} không thể được gán vào cluster. Chỉ có MASTER và WORKER mới được phép.`);
       return;
     }
 
@@ -184,7 +184,7 @@ export function Clusters() {
     // Chỉ cho phép MASTER hoặc WORKER khi gán vào cluster
     const roleUpper = role.toUpperCase();
     if (roleUpper !== "MASTER" && roleUpper !== "WORKER") {
-      toast.error("Chỉ có thể gán server với role MASTER hoặc WORKER vào cluster");
+      toast.error("Chỉ có thể gán host với role MASTER hoặc WORKER vào cluster");
       return;
     }
     setServerRoles((prev) => ({ ...prev, [serverId]: roleUpper }));
@@ -204,14 +204,14 @@ export function Clusters() {
     // Chỉ cho phép đổi giữa MASTER và WORKER trong cluster
     const newRoleUpper = newRole.toUpperCase();
     if (newRoleUpper !== "MASTER" && newRoleUpper !== "WORKER") {
-      toast.error("Chỉ có thể đổi role giữa MASTER và WORKER trong cluster. Để đổi sang DOCKER hoặc ANSIBLE, vui lòng gỡ server khỏi cluster trước.");
+      toast.error("Chỉ có thể đổi role giữa MASTER và WORKER trong cluster. Để đổi sang DOCKER hoặc ANSIBLE, vui lòng gỡ host khỏi cluster trước.");
       return;
     }
 
     // Kiểm tra nếu đang đổi tất cả MASTER thành role khác
     const currentMasterCount = serversInCluster.filter((s) => s.role === "MASTER").length;
     if (server.role === "MASTER" && newRoleUpper !== "MASTER" && currentMasterCount === 1) {
-      toast.error("Phải có ít nhất 1 server với role MASTER trong cluster");
+      toast.error("Phải có ít nhất 1 host với role MASTER trong cluster");
       return;
     }
 
@@ -235,23 +235,33 @@ export function Clusters() {
       const fullServer = await adminAPI.getServer(server.id);
       setEditingServer(fullServer);
       // Load form data từ server
+      // Trong cluster chỉ có MASTER hoặc WORKER, clusterStatus luôn là AVAILABLE
+      const serverRole = (fullServer.role === "MASTER" || fullServer.role === "WORKER") 
+        ? fullServer.role 
+        : "WORKER";
+      
       setFormData({
         name: fullServer.name || "",
         ipAddress: fullServer.ipAddress || "",
         port: String(fullServer.port || 22),
         username: fullServer.username || "",
         password: "", // Không load password khi edit
-        role: fullServer.role || "WORKER",
+        role: serverRole,
         serverStatus: fullServer.serverStatus || (fullServer.status === "online" ? "RUNNING" : "STOPPED") || "RUNNING",
-        clusterStatus: fullServer.clusterStatus || "UNAVAILABLE",
+        clusterStatus: "AVAILABLE", // Trong cluster luôn là AVAILABLE
       });
       setIsEditDialogOpen(true);
     } catch (error: any) {
       const errorMessage = error.message || 
                           error.response?.data?.message || 
-                          "Không thể tải thông tin server";
+                          "Không thể tải thông tin host";
       toast.error(errorMessage);
       // Fallback: dùng thông tin từ list nếu load detail thất bại
+      // Trong cluster chỉ có MASTER hoặc WORKER, clusterStatus luôn là AVAILABLE
+      const serverRole = (server.role === "MASTER" || server.role === "WORKER") 
+        ? server.role 
+        : "WORKER";
+      
       setEditingServer(server);
       setFormData({
         name: server.name || "",
@@ -259,9 +269,9 @@ export function Clusters() {
         port: String(server.port || 22),
         username: server.username || "",
         password: "",
-        role: server.role || "WORKER",
+        role: serverRole,
         serverStatus: server.serverStatus || (server.status === "online" ? "RUNNING" : "STOPPED") || "RUNNING",
-        clusterStatus: server.clusterStatus || "UNAVAILABLE",
+        clusterStatus: "AVAILABLE", // Trong cluster luôn là AVAILABLE
       });
       setIsEditDialogOpen(true);
     }
@@ -275,12 +285,17 @@ export function Clusters() {
 
     try {
       setIsSubmitting(true);
-      // Khi sửa server: chỉ cập nhật các trường cấu hình (không cần test SSH)
+      // Khi sửa host trong cluster: chỉ cập nhật các trường cấu hình (không cần test SSH)
+      // Trong cluster chỉ có MASTER hoặc WORKER, clusterStatus luôn là AVAILABLE
+      const finalRole = (formData.role === "MASTER" || formData.role === "WORKER") 
+        ? formData.role 
+        : "WORKER";
+      
       const data: any = {
         name: formData.name,
-        role: formData.role || "WORKER",
+        role: finalRole,
         serverStatus: formData.serverStatus || "RUNNING",
-        clusterStatus: formData.clusterStatus || "UNAVAILABLE",
+        clusterStatus: "AVAILABLE", // Trong cluster luôn là AVAILABLE
       };
       
       // Chỉ gửi thông tin kết nối nếu người dùng thực sự thay đổi
@@ -301,14 +316,14 @@ export function Clusters() {
       }
       
       await adminAPI.updateServer(editingServer.id, data);
-      toast.success("Cập nhật server thành công");
+      toast.success("Cập nhật host thành công");
       setIsEditDialogOpen(false);
       await loadData();
     } catch (error: any) {
       const errorMessage = error.message || 
                           error.response?.data?.message || 
                           error.response?.data?.error || 
-                          "Không thể cập nhật server";
+                          "Không thể cập nhật host";
       toast.error(errorMessage);
       console.error("Error updating server:", error);
     } finally {
@@ -324,21 +339,21 @@ export function Clusters() {
     // Kiểm tra nếu đang xóa tất cả MASTER
     const currentMasterCount = serversInCluster.filter((s) => s.role === "MASTER").length;
     if (server.role === "MASTER" && currentMasterCount === 1) {
-      toast.error("Không thể bỏ server MASTER này. Phải có ít nhất 1 MASTER trong cluster.");
+      toast.error("Không thể bỏ host MASTER này. Phải có ít nhất 1 MASTER trong cluster.");
       return;
     }
 
-    if (!confirm(`Bạn có chắc muốn gỡ server "${server.name}" khỏi cluster?`)) {
+    if (!confirm(`Bạn có chắc muốn gỡ host "${server.name}" khỏi cluster?`)) {
       return;
     }
 
     try {
       setRemovingServerId(serverId);
       await adminAPI.unassignServersFromCluster([serverId]);
-      toast.success(`Đã gỡ server ${server.name} khỏi cluster`);
+      toast.success(`Đã gỡ host ${server.name} khỏi cluster`);
       await loadData();
     } catch (error: any) {
-      const errorMessage = error.message || "Không thể gỡ server khỏi cluster";
+      const errorMessage = error.message || "Không thể gỡ host khỏi cluster";
       toast.error(errorMessage);
     } finally {
       setRemovingServerId(null);
@@ -348,7 +363,7 @@ export function Clusters() {
   // Handle gán servers vào cluster
   const handleAssignServers = async () => {
     if (selectedServers.size === 0) {
-      toast.error("Vui lòng chọn ít nhất một server");
+      toast.error("Vui lòng chọn ít nhất một host");
       return;
     }
 
@@ -360,7 +375,7 @@ export function Clusters() {
     // Nếu chưa có MASTER nào trong cluster và không có MASTER nào được chọn
     const existingMasterCount = serversInCluster.filter((s) => s.role === "MASTER").length;
     if (existingMasterCount === 0 && masterCount === 0) {
-      toast.error("Phải có ít nhất 1 server với role MASTER");
+      toast.error("Phải có ít nhất 1 host với role MASTER");
       return;
     }
 
@@ -383,12 +398,12 @@ export function Clusters() {
       });
 
       await adminAPI.assignServersToCluster(updates);
-      toast.success(`Đã gán ${serverIds.length} server vào cluster`);
+      toast.success(`Đã gán ${serverIds.length} host vào cluster`);
       
       handleCloseAssignModal();
       await loadData();
     } catch (error: any) {
-      const errorMessage = error.message || "Không thể gán servers vào cluster";
+      const errorMessage = error.message || "Không thể gán hosts vào cluster";
       toast.error(errorMessage);
     } finally {
       setIsAssigning(false);
@@ -422,7 +437,7 @@ export function Clusters() {
             <Network className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">Quản lý Cluster</h2>
+            <h2 className="text-2xl font-bold">Gán host vào cluster</h2>
             <p className="text-sm text-muted-foreground">Đang tải dữ liệu...</p>
           </div>
         </div>
@@ -445,9 +460,9 @@ export function Clusters() {
             <Network className="h-6 w-6 text-primary" />
           </div>
         <div>
-            <h2 className="text-2xl font-bold">Quản lý Cluster</h2>
+            <h2 className="text-2xl font-bold">Gán host vào cluster</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Gán servers vào cluster, để tiến hành cài đặt và quản lý cluster.
+              Gán nhãn cho hosts vào cụm cho việc chuẩn bị cài đặt hạ tầng cụm k8s.
           </p>
           </div>
         </div>
@@ -529,7 +544,7 @@ export function Clusters() {
                 <ServerIcon className="h-4 w-4 text-green-600 dark:text-green-500" />
               </div>
               <CardTitle className="text-lg font-semibold">
-                Servers trong cluster
+                Hosts trong cluster
                 <span className="ml-2 text-base font-normal text-muted-foreground">
                   ({serversInCluster.length})
                 </span>
@@ -558,13 +573,13 @@ export function Clusters() {
               <div className="h-16 w-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
                 <ServerIcon className="h-8 w-8 text-muted-foreground" />
               </div>
-              <p className="text-lg font-medium mb-2">Chưa có server nào trong cluster</p>
+              <p className="text-lg font-medium mb-2">Chưa có host nào trong cluster</p>
               <p className="text-sm text-muted-foreground mb-4">
-                Nhấn nút "Gán vào cluster" để thêm servers vào cluster
+                Nhấn nút "Gán vào cluster" để thêm hosts vào cluster
               </p>
               <Button onClick={handleOpenAssignModal} size="sm">
                 <Plus className="h-4 w-4 mr-2" />
-                Gán servers vào cluster
+                Gán hosts vào cluster
               </Button>
             </div>
           ) : (
@@ -670,11 +685,11 @@ export function Clusters() {
       <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col" onClose={handleCloseAssignModal}>
           <DialogHeader>
-            <DialogTitle>Gán servers vào cluster</DialogTitle>
+            <DialogTitle>Gán hosts vào cluster</DialogTitle>
             <DialogDescription>
-              Chọn các servers chưa nằm trong cluster để gán vào cluster. 
-              Chỉ có thể gán servers với role MASTER hoặc WORKER vào cluster. 
-              Vui lòng đảm bảo có ít nhất 1 server với role MASTER.
+              Chọn các hosts chưa nằm trong cluster để gán vào cluster. 
+              Chỉ có thể gán hosts với role MASTER hoặc WORKER vào cluster. 
+              Vui lòng đảm bảo có ít nhất 1 host với role MASTER.
             </DialogDescription>
           </DialogHeader>
           
@@ -696,8 +711,8 @@ export function Clusters() {
                 {filteredAvailableServers.length === 0 ? (
                   <div className="p-8 text-center text-muted-foreground">
                     {serversNotInCluster.length === 0 
-                      ? "Không có server nào chưa trong cluster"
-                      : "Không tìm thấy server nào"}
+                      ? "Không có host nào chưa trong cluster"
+                      : "Không tìm thấy host nào"}
                   </div>
                 ) : (
                   <table className="w-full">
@@ -807,7 +822,7 @@ export function Clusters() {
             {/* Footer với thông tin và nút */}
             <div className="flex items-center justify-between pt-4 border-t">
               <div className="text-sm text-muted-foreground">
-                Đã chọn: {selectedServers.size} server
+                Đã chọn: {selectedServers.size} host
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -859,12 +874,12 @@ export function Clusters() {
       }}>
         <DialogContent className="w-[800px] max-w-[800px] h-[600px] max-h-[600px] flex flex-col">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
               <Settings className="h-6 w-6" />
-              Sửa Server
+              Sửa Host
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-2">
-              Cập nhật thông tin kết nối và cấu hình server
+              Cập nhật thông tin kết nối và cấu hình host
             </p>
           </DialogHeader>
           
@@ -873,19 +888,19 @@ export function Clusters() {
             <div className="space-y-2 flex-shrink-0">
               <Label htmlFor="edit-name" className="text-sm font-medium flex items-center gap-2">
                 <ServerIcon className="h-3.5 w-3.5" />
-                Tên Server <span className="text-destructive">*</span>
+                Host Name <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="edit-name"
                 name="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="server-01, master-node, worker-01..."
+                placeholder="host-01, master-node, worker-01..."
                 className="h-10"
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Tên hiển thị để dễ dàng nhận biết server
+                Tên hiển thị để dễ dàng nhận biết host
               </p>
             </div>
 
@@ -898,7 +913,7 @@ export function Clusters() {
                 </TabsTrigger>
                 <TabsTrigger value="configuration" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  K8S Roles
+                  Vai trò
                 </TabsTrigger>
               </TabsList>
 
@@ -998,17 +1013,23 @@ export function Clusters() {
                       id="edit-role"
                       name="role"
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      onChange={(e) => {
+                        const newRole = e.target.value;
+                        // Trong cluster chỉ cho phép MASTER hoặc WORKER
+                        if (newRole !== "MASTER" && newRole !== "WORKER") {
+                          toast.error("Trong cluster chỉ có thể chọn role MASTER hoặc WORKER");
+                          return;
+                        }
+                        setFormData({ ...formData, role: newRole });
+                      }}
                       className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       required
                     >
                       <option value="MASTER">MASTER - Master Node</option>
                       <option value="WORKER">WORKER - Worker Node</option>
-                      <option value="DOCKER">DOCKER - Docker Host</option>
-                      <option value="ANSIBLE">ANSIBLE - Ansible Controller</option>
                     </select>
                     <p className="text-xs text-muted-foreground">
-                      Vai trò của server trong hệ thống
+                      Vai trò của host trong cluster (chỉ có MASTER hoặc WORKER)
                     </p>
                   </div>
                   <div className="space-y-2 hidden">
@@ -1037,20 +1058,22 @@ export function Clusters() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-clusterStatus" className="text-sm font-medium">
                     Cluster Status <span className="text-destructive">*</span>
+                    <span className="ml-2 text-xs text-muted-foreground font-normal">
+                      (Tự động: AVAILABLE)
+                    </span>
                   </Label>
                   <select
                     id="edit-clusterStatus"
                     name="clusterStatus"
-                    value={formData.clusterStatus}
-                    onChange={(e) => setFormData({ ...formData, clusterStatus: e.target.value })}
+                    value="AVAILABLE"
+                    disabled
                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     required
                   >
                     <option value="AVAILABLE">AVAILABLE - Sẵn sàng trong cluster</option>
-                    <option value="UNAVAILABLE">UNAVAILABLE - Không sẵn sàng</option>
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    Trạng thái tham gia vào Kubernetes cluster
+                    Host trong cluster luôn có trạng thái AVAILABLE
                   </p>
                 </div>
               </TabsContent>

@@ -63,6 +63,10 @@ public interface AdminService {
 
     void removeNodeFromK8s(String nodeName, String nodeIp);
 
+    void cordonNode(String nodeName);
+
+    void uncordonNode(String nodeName);
+
     NamespaceListResponse getNamespaces();
 
     NamespaceDetailResponse getNamespace(String name);
