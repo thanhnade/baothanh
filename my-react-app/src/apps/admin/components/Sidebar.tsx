@@ -45,7 +45,7 @@ const menuGroups: MenuGroup[] = [
       { label: "Hosts", path: "/admin/infrastructure/servers", icon: Server },
       { label: "Cluster Assign Hosts", path: "/admin/infrastructure/clusters", icon: Network },
       // { label: "Cluster Setup", path: "/admin/infrastructure/cluster-setup", icon: Settings },
-      { label: "Cluster Setup", path: "/admin/infrastructure/cluster-setup-amd", icon: Settings },
+      { label: "Setting", path: "/admin/infrastructure/cluster-setup-amd", icon: Settings },
     ],
   },
   {

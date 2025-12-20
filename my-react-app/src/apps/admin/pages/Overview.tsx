@@ -11,6 +11,7 @@ import {
   Shield,
   Settings,
   BarChart3,
+  LayoutDashboard,
 } from "lucide-react";
 
 /**
@@ -60,8 +61,13 @@ export function Overview() {
   const managementModules = [
     {
       title: "Infrastructure",
-      items: ["Hosts", "Cluster Assign Hosts", "Nodes", "Namespaces"],
+      items: ["Hosts", "Cluster Assign Hosts", "Setting"],
       icon: Network,
+    },
+    {
+      title: "Kubernetes Cluster",
+      items: ["Overview", "Nodes", "Namespace"],
+      icon: LayoutDashboard,
     },
     {
       title: "Workloads",

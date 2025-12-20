@@ -168,7 +168,7 @@ const Stepper = ({ steps, className = "" }: StepperProps) => {
 };
 
 /**
- * Trang Cluster Setup - Thiết lập và cấu hình Kubernetes Cluster
+ * Trang Setting - Thiết lập và cấu hình Kubernetes Cluster
  */
 export function ClusterSetup() {
   const [cluster, setCluster] = useState<Cluster | null>(null);
@@ -1087,8 +1087,6 @@ export function ClusterSetup() {
       setDockerStatus({
         installed: !!status.installed,
         version: status.version || undefined,
-        dockerHost: status.dockerHost || undefined,
-        dockerRole: (status.dockerRole as "DOCKER") || undefined,
         error: status.error || undefined,
       });
 
@@ -2004,7 +2002,7 @@ export function ClusterSetup() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">⚙️ Cluster Setup</h2>
+        <h2 className="text-2xl font-bold">⚙️ Setting</h2>
         <div className="border rounded-lg p-8 text-center">
           <div className="animate-pulse">Đang tải...</div>
         </div>
@@ -2017,7 +2015,7 @@ export function ClusterSetup() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">⚙️ Cluster Setup</h2>
+          <h2 className="text-2xl font-bold">⚙️ Setting</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Thiết lập và cấu hình Kubernetes Cluster
           </p>
