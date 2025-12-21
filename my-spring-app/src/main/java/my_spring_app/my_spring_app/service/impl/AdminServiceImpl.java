@@ -2538,16 +2538,16 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
                                                 && address.getAddress().trim().equals(server.getIp().trim())) {
                                             matchByIp = true;
                                             break;
-                                        }
-                                    }
                                 }
+                            }
+                        }
                                 
                                 if (matchByName || matchByIp) {
                                     hasAssignedServer = true;
                                     break;
-                                }
-                            }
-                            
+                    }
+                }
+                
                             // Nếu node có trong K8s và Ready và có server assigned -> healthy
                             // Nếu node có trong K8s nhưng NotReady hoặc không có server assigned -> unhealthy
                             if (isReady && hasAssignedServer) {
@@ -2578,8 +2578,8 @@ public class AdminServiceImpl extends BaseKubernetesService implements AdminServ
                     if (!foundInK8s) {
                         notJoinK8sCount++;
                     }
-                }
-                
+                    }
+                    
                 // Tổng hợp: Total = nodes từ K8s + servers chưa join K8s
                 int totalNodes = k8sNodesCount + notJoinK8sCount;
                 int healthyNodes = k8sHealthyNodes;

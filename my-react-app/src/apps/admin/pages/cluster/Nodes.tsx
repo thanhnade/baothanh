@@ -208,7 +208,7 @@ export function Nodes() {
       clusterStatus: "AVAILABLE",
     });
     setIsCreateDialogOpen(true);
-
+    
     // Load danh sách servers khi mở modal
     await loadAvailableServers();
   };
@@ -292,21 +292,21 @@ export function Nodes() {
 
       await adminAPI.assignServersToCluster(updates);
       toast.success(`Đã gán ${serverIds.length} server vào cluster thành công`);
-
+      
       // Reset state
       setSelectedServers(new Set());
       setServerRoles({});
       setAssignSearchQuery("");
-
+      
       // Reload nodes để cập nhật danh sách
       await loadNodes(false);
-
+      
       // Đóng modal hoặc chuyển về tab create
       setCreateMode("create");
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message ||
-        error?.message ||
-        "Không thể gán servers vào cluster";
+                          error?.message ||
+                          "Không thể gán servers vào cluster";
       toast.error(errorMessage);
     } finally {
       setIsAssigning(false);
@@ -360,7 +360,7 @@ export function Nodes() {
 
   const handleCreateServer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
+    
     try {
       setIsSubmitting(true);
       const data: any = {
@@ -375,17 +375,17 @@ export function Nodes() {
         status: "online" as const,
         os: "Unknown",
       };
-
+      
       await adminAPI.createServer(data);
       toast.success("Tạo server thành công. Hệ thống đang tự động cấu hình SSH key và lấy metrics...");
       setIsCreateDialogOpen(false);
       // Reload nodes và servers để cập nhật danh sách và role limits
       await Promise.all([loadNodes(false), loadAllServers()]);
     } catch (error: any) {
-      const errorMessage = error.message ||
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        "Không thể tạo server";
+      const errorMessage = error.message || 
+                          error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          "Không thể tạo server";
       toast.error(errorMessage);
       console.error("Error creating server:", error);
     } finally {
@@ -527,63 +527,63 @@ export function Nodes() {
 
   // Handler functions for actions
   const handleAssignNode = async (node: Node) => {
-    setAssigningNode(node.name);
-    try {
-      // Lấy chi tiết node để lấy IP từ yaml
-      const nodeDetail = await adminAPI.getNode(node.name);
-
+                setAssigningNode(node.name);
+                try {
+                  // Lấy chi tiết node để lấy IP từ yaml
+                  const nodeDetail = await adminAPI.getNode(node.name);
+                  
       // Parse IP từ yaml hoặc dùng node.ip nếu có
       let nodeIp: string | null = node.ip || null;
       if (!nodeIp && nodeDetail.yaml) {
-        // Tìm InternalIP trong yaml
-        const internalIpMatch = nodeDetail.yaml.match(/type:\s*InternalIP[\s\S]*?address:\s*([0-9.]+)/);
-        if (internalIpMatch && internalIpMatch[1]) {
-          nodeIp = internalIpMatch[1].trim();
-        }
-      }
-
-      if (!nodeIp) {
-        toast.error(`Không thể lấy IP của node ${node.name}`);
+                    // Tìm InternalIP trong yaml
+                    const internalIpMatch = nodeDetail.yaml.match(/type:\s*InternalIP[\s\S]*?address:\s*([0-9.]+)/);
+                    if (internalIpMatch && internalIpMatch[1]) {
+                      nodeIp = internalIpMatch[1].trim();
+                    }
+                  }
+                  
+                  if (!nodeIp) {
+                    toast.error(`Không thể lấy IP của node ${node.name}`);
         setAssigningNode(null);
-        return;
-      }
-
+                    return;
+                  }
+                  
       // Tìm server theo IP hoặc theo tên
-      const servers = await adminAPI.getServers();
+                  const servers = await adminAPI.getServers();
       let matchedServer = servers.find(s => s.ipAddress === nodeIp);
-
+                  
       // Nếu không tìm thấy theo IP, thử tìm theo tên
-      if (!matchedServer) {
+                  if (!matchedServer) {
         matchedServer = servers.find(s => s.name.toLowerCase() === node.name.toLowerCase());
-      }
-
+                  }
+                  
       // Nếu tìm thấy server trong CSDL → chỉ cập nhật cluster_status
       if (matchedServer) {
-        const serverId = matchedServer.id;
-        let serverRole = matchedServer.role?.toUpperCase() || "WORKER";
-
-        // Chỉ cho phép MASTER hoặc WORKER khi gán vào cluster
-        if (serverRole !== "MASTER" && serverRole !== "WORKER") {
-          serverRole = "WORKER";
-        }
-
-        // Gán server vào cluster
-        await adminAPI.assignServersToCluster([{
-          serverId: serverId,
-          role: serverRole
-        }]);
-
-        toast.success("Đã assign node vào cluster thành công");
-        // Reload danh sách nodes
-        await loadNodes(false);
+                  const serverId = matchedServer.id;
+                  let serverRole = matchedServer.role?.toUpperCase() || "WORKER";
+                  
+                  // Chỉ cho phép MASTER hoặc WORKER khi gán vào cluster
+                  if (serverRole !== "MASTER" && serverRole !== "WORKER") {
+                    serverRole = "WORKER";
+                  }
+                  
+                  // Gán server vào cluster
+                  await adminAPI.assignServersToCluster([{ 
+                    serverId: serverId, 
+                    role: serverRole
+                  }]);
+                  
+                  toast.success("Đã assign node vào cluster thành công");
+                  // Reload danh sách nodes
+                  await loadNodes(false);
         setAssigningNode(null);
         return;
       }
-
+      
       // Nếu KHÔNG tìm thấy server trong CSDL → hiển thị modal nhập mật khẩu
       // Lấy role từ node (master/worker)
       const nodeRole = node.role?.toUpperCase() === "MASTER" ? "MASTER" : "WORKER";
-
+      
       setNodeToCreate({
         name: node.name,
         ip: nodeIp,
@@ -594,29 +594,29 @@ export function Nodes() {
       });
       setIsPasswordDialogOpen(true);
       setAssigningNode(null);
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.message ||
-        error?.message ||
-        "Không thể assign node vào cluster";
-      toast.error(errorMessage);
-      setAssigningNode(null);
-    }
+                } catch (error: any) {
+                  const errorMessage = error?.response?.data?.message || 
+                                     error?.message || 
+                                     "Không thể assign node vào cluster";
+                  toast.error(errorMessage);
+                  setAssigningNode(null);
+                }
   };
 
   // Handler tạo server mới từ node chưa có trong CSDL
   const handleCreateServerFromNode = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
+    
     if (!nodeToCreate) return;
-
+    
     if (!nodeToCreate.username || !nodeToCreate.password) {
       toast.error("Vui lòng nhập đầy đủ username và password");
       return;
     }
-
+    
     try {
       setIsCreatingServer(true);
-
+      
       // Tạo server mới với thông tin từ node
       const serverData: any = {
         name: nodeToCreate.name,
@@ -630,35 +630,35 @@ export function Nodes() {
         status: "online" as const,
         os: "Unknown",
       };
-
+      
       // Tạo server mới (API trả về Server với ID)
       const createdServer = await adminAPI.createServer(serverData);
-
+      
       if (!createdServer || !createdServer.id) {
         toast.error("Tạo server thành công nhưng không nhận được ID server");
         setIsCreatingServer(false);
         return;
       }
-
+      
       // Gán server vừa tạo vào cluster
-      await adminAPI.assignServersToCluster([{
-        serverId: createdServer.id,
+      await adminAPI.assignServersToCluster([{ 
+        serverId: createdServer.id, 
         role: nodeToCreate.role as "MASTER" | "WORKER"
       }]);
-
+      
       toast.success("Đã tạo server và assign vào cluster thành công");
-
+      
       // Đóng modal và reset state
       setIsPasswordDialogOpen(false);
       setNodeToCreate(null);
-
+      
       // Reload danh sách nodes
       await loadNodes(false);
     } catch (error: any) {
-      const errorMessage = error.message ||
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        "Không thể tạo server";
+      const errorMessage = error.message || 
+                          error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          "Không thể tạo server";
       toast.error(errorMessage);
       console.error("Error creating server from node:", error);
     } finally {
@@ -667,30 +667,30 @@ export function Nodes() {
   };
 
   const handleJoinNode = async (node: Node) => {
-    setJoiningNode(node.id);
-    try {
-      // node.id là server ID khi status là NOT_JOIN_K8S
-      const serverId = node.id;
-
-      if (!serverId) {
-        toast.error(`Không thể xác định server ID cho node ${node.name}`);
-        return;
-      }
-
-      // Join node vào K8s cluster
-      await adminAPI.joinNodeToK8s(serverId);
-
-      toast.success("Đã join node vào K8s cluster thành công");
-      // Reload danh sách nodes
-      await loadNodes(false);
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.message ||
-        error?.message ||
-        "Không thể join node vào K8s cluster";
-      toast.error(errorMessage);
-    } finally {
-      setJoiningNode(null);
-    }
+                setJoiningNode(node.id);
+                try {
+                  // node.id là server ID khi status là NOT_JOIN_K8S
+                  const serverId = node.id;
+                  
+                  if (!serverId) {
+                    toast.error(`Không thể xác định server ID cho node ${node.name}`);
+                    return;
+                  }
+                  
+                  // Join node vào K8s cluster
+                  await adminAPI.joinNodeToK8s(serverId);
+                  
+                  toast.success("Đã join node vào K8s cluster thành công");
+                  // Reload danh sách nodes
+                  await loadNodes(false);
+                } catch (error: any) {
+                  const errorMessage = error?.response?.data?.message || 
+                                     error?.message || 
+                                     "Không thể join node vào K8s cluster";
+                  toast.error(errorMessage);
+                } finally {
+                  setJoiningNode(null);
+                }
   };
 
   const handleRemoveFromCluster = async (node: Node) => {
@@ -724,7 +724,7 @@ export function Nodes() {
           // Với node NOT_ASSIGN, tìm server theo IP
           // Ưu tiên dùng node.ip nếu có (đã được set từ backend)
           let nodeIp: string | null = node.ip || null;
-
+          
           // Nếu không có IP từ node, thử lấy từ detail yaml (fallback)
           if (!nodeIp) {
             try {
@@ -739,29 +739,29 @@ export function Nodes() {
               console.warn("Không thể lấy node detail để parse IP:", error);
             }
           }
-
+          
           if (!nodeIp) {
             toast.error(`Không thể lấy IP của node ${node.name}`);
             return;
           }
-
+          
           // Tìm server theo IP
           const servers = await adminAPI.getServers();
           matchedServer = servers.find(s => s.ipAddress === nodeIp) || null;
-
+          
           if (!matchedServer) {
             toast.error(`Không tìm thấy server với IP ${nodeIp} tương ứng với node ${node.name}`);
             return;
           }
-
+          
           serverId = matchedServer.id;
         }
-
+        
         if (!serverId) {
           toast.error(`Không thể xác định server ID cho node ${node.name}`);
           return;
         }
-
+        
         // Kiểm tra nếu đang xóa MASTER cuối cùng (cho cả NOT_JOIN_K8S và NOT_ASSIGN)
         if (matchedServer && matchedServer.role === "MASTER") {
           const servers = await adminAPI.getServers();
@@ -772,19 +772,19 @@ export function Nodes() {
             return;
           }
         }
-
+        
         // Gỡ server khỏi cluster
         await adminAPI.unassignServersFromCluster([serverId]);
         toast.success(`Đã gỡ node ${node.name} khỏi cluster thành công`);
       }
-
+      
       // Reload danh sách nodes
       await loadNodes(false);
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "Không thể gỡ node khỏi cluster";
+      const errorMessage = error?.response?.data?.message || 
+                         error?.response?.data?.error ||
+                         error?.message || 
+                         "Không thể gỡ node khỏi cluster";
       toast.error(errorMessage);
     } finally {
       setRemovingNode(null);
@@ -951,7 +951,7 @@ export function Nodes() {
         </>
       )}
       {node.status === "NOT_ASSIGN" && (
-        <DropdownMenuItem
+        <DropdownMenuItem 
           onClick={() => handleAssignNode(node)}
           disabled={assigningNode === node.name}
         >
@@ -969,16 +969,16 @@ export function Nodes() {
         </DropdownMenuItem>
       )}
       {node.status === "NOT_JOIN_K8S" && (
-        <DropdownMenuItem
+        <DropdownMenuItem 
           onClick={() => handleJoinNode(node)}
           disabled={joiningNode === node.id}
         >
           {joiningNode === node.id ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Đang JOIN...
-            </>
-          ) : (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang JOIN...
+                </>
+              ) : (
             <>
               <Network className="mr-2 h-4 w-4" />
               JOIN K8S
@@ -988,7 +988,7 @@ export function Nodes() {
       )}
       {/* Hiển thị "Gỡ khỏi cụm" khi node đã được gán vào cluster (status khác NOT_ASSIGN) */}
       {node.status !== "NOT_ASSIGN" && (
-        <DropdownMenuItem
+        <DropdownMenuItem 
           onClick={() => handleRemoveFromCluster(node)}
           disabled={removingNode === node.name}
           className="text-destructive focus:text-destructive"
@@ -1108,21 +1108,21 @@ export function Nodes() {
         </Select>
       </div>
       <Button
-        variant="outline"
-        onClick={() => loadNodes(false)}
-        disabled={isRefreshing}
-      >
-        {isRefreshing ? (
-          <>
-            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-            Đang làm mới...
-          </>
-        ) : (
-          <>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Làm mới
-          </>
-        )}
+          variant="outline"
+          onClick={() => loadNodes(false)}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Đang làm mới...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Làm mới
+            </>
+          )}
       </Button>
     </div>
   );
@@ -1172,187 +1172,187 @@ export function Nodes() {
                 </TabsList>
 
                 <TabsContent value="info">
-                  <div className="rounded-md border p-4 space-y-4">
-                    <div className="flex flex-wrap items-center gap-4">
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Node Name</div>
-                        <div className="mt-1 text-sm font-semibold">{selectedNode.name}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Role</div>
-                        <Badge variant="secondary" className="mt-1">
-                          {selectedNode.role}
-                        </Badge>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Status</div>
-                        {selectedNode.status === "NOT_ASSIGN" ? (
-                          <Badge
-                            variant="secondary"
-                            className="mt-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
-                          >
-                            NOT ASSIGN
-                          </Badge>
-                        ) : selectedNode.status === "NOT_JOIN_K8S" ? (
-                          <Badge
-                            variant="secondary"
-                            className="mt-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20"
-                          >
-                            NOT JOIN K8S
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant={selectedNode.status === "ready" ? "success" : "destructive"}
-                            className="mt-1"
-                          >
-                            {selectedNode.status === "ready" ? "Ready" : "Not Ready"}
-                          </Badge>
-                        )}
-                      </div>
+                <div className="rounded-md border p-4 space-y-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Node Name</div>
+                      <div className="mt-1 text-sm font-semibold">{selectedNode.name}</div>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">CPU</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {formatNumber(selectedNode.cpu.capacity)} vCPU
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">RAM</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {formatNumber(selectedNode.memory.capacity)} GB
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Operating System</div>
-                        <div className="mt-1 text-sm font-medium">{selectedNode.os ?? "Unknown"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Kubelet</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {selectedNode.kubeletVersion ?? "Unknown"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Container Runtime</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {selectedNode.containerRuntime ?? "Unknown"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase">Updated</div>
-                        <div className="mt-1 text-sm">{formatDate(selectedNode.updatedAt)}</div>
-                      </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Role</div>
+                      <Badge variant="secondary" className="mt-1">
+                        {selectedNode.role}
+                      </Badge>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Status</div>
+                      {selectedNode.status === "NOT_ASSIGN" ? (
+                        <Badge
+                          variant="secondary"
+                          className="mt-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
+                        >
+                          NOT ASSIGN
+                        </Badge>
+                      ) : selectedNode.status === "NOT_JOIN_K8S" ? (
+                        <Badge
+                          variant="secondary"
+                          className="mt-1 bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20"
+                        >
+                          NOT JOIN K8S
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant={selectedNode.status === "ready" ? "success" : "destructive"}
+                          className="mt-1"
+                        >
+                          {selectedNode.status === "ready" ? "Ready" : "Not Ready"}
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                </TabsContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">CPU</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {formatNumber(selectedNode.cpu.capacity)} vCPU
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">RAM</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {formatNumber(selectedNode.memory.capacity)} GB
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Operating System</div>
+                      <div className="mt-1 text-sm font-medium">{selectedNode.os ?? "Unknown"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Kubelet</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {selectedNode.kubeletVersion ?? "Unknown"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Container Runtime</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {selectedNode.containerRuntime ?? "Unknown"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase">Updated</div>
+                      <div className="mt-1 text-sm">{formatDate(selectedNode.updatedAt)}</div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
 
                 <TabsContent value="resources" className="space-y-6">
-                  <section className="space-y-6">
-                    <div className="grid gap-6 md:grid-cols-3">
-                      <div className="rounded-md border p-5 space-y-4">
-                        <div>
-                          <div className="text-xs text-muted-foreground uppercase mb-1">CPU (cores)</div>
-                          <div className="text-sm text-muted-foreground">
-                            Allocatable: {formatNumber(selectedNode.cpu.limit)} | Capacity: {formatNumber(selectedNode.cpu.capacity)}
-                          </div>
+                <section className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-3">
+                    <div className="rounded-md border p-5 space-y-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase mb-1">CPU (cores)</div>
+                        <div className="text-sm text-muted-foreground">
+                          Allocatable: {formatNumber(selectedNode.cpu.limit)} | Capacity: {formatNumber(selectedNode.cpu.capacity)}
                         </div>
-                        <ResourceProgressBar
-                          label="CPU Usage"
-                          used={selectedNode.cpu.requested}
-                          total={selectedNode.cpu.limit}
-                          unit="cores"
-                        />
                       </div>
-                      <div className="rounded-md border p-5 space-y-4">
-                        <div>
-                          <div className="text-xs text-muted-foreground uppercase mb-1">Memory (GB)</div>
-                          <div className="text-sm text-muted-foreground">
-                            Allocatable: {formatNumber(selectedNode.memory.limit)} | Capacity: {formatNumber(selectedNode.memory.capacity)}
-                          </div>
-                        </div>
-                        <ResourceProgressBar
-                          label="Memory Usage"
-                          used={selectedNode.memory.requested}
-                          total={selectedNode.memory.limit}
-                          unit="GB"
-                        />
-                      </div>
-                      <div className="rounded-md border p-5 space-y-4">
-                        <div>
-                          <div className="text-xs text-muted-foreground uppercase mb-1">Disk (GB)</div>
-                          <div className="text-sm text-muted-foreground">
-                            Capacity: {formatNumber(selectedNode.disk.capacity)}
-                          </div>
-                        </div>
-                        <ResourceProgressBar
-                          label="Disk Usage"
-                          used={selectedNode.disk.requested}
-                          total={selectedNode.disk.capacity}
-                          unit="GB"
-                        />
-                      </div>
+                      <ResourceProgressBar
+                        label="CPU Usage"
+                        used={selectedNode.cpu.requested}
+                        total={selectedNode.cpu.limit}
+                        unit="cores"
+                      />
                     </div>
-                  </section>
-                </TabsContent>
+                    <div className="rounded-md border p-5 space-y-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase mb-1">Memory (GB)</div>
+                        <div className="text-sm text-muted-foreground">
+                          Allocatable: {formatNumber(selectedNode.memory.limit)} | Capacity: {formatNumber(selectedNode.memory.capacity)}
+                        </div>
+                      </div>
+                      <ResourceProgressBar
+                        label="Memory Usage"
+                        used={selectedNode.memory.requested}
+                        total={selectedNode.memory.limit}
+                        unit="GB"
+                      />
+                    </div>
+                    <div className="rounded-md border p-5 space-y-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase mb-1">Disk (GB)</div>
+                        <div className="text-sm text-muted-foreground">
+                          Capacity: {formatNumber(selectedNode.disk.capacity)}
+                        </div>
+                      </div>
+                      <ResourceProgressBar
+                        label="Disk Usage"
+                        used={selectedNode.disk.requested}
+                        total={selectedNode.disk.capacity}
+                        unit="GB"
+                      />
+                    </div>
+                  </div>
+                </section>
+              </TabsContent>
 
                 <TabsContent value="pods">
-                  {selectedNode.pods && selectedNode.pods.length > 0 ? (
-                    <div className="rounded-md border">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted">
-                            <tr>
-                              <th className="px-4 py-2 text-left">Tên</th>
-                              <th className="px-4 py-2 text-left">Namespace</th>
-                              <th className="px-4 py-2 text-left">Status</th>
-                              <th className="px-4 py-2 text-left">IP</th>
-                              <th className="px-4 py-2 text-left">Age</th>
+                {selectedNode.pods && selectedNode.pods.length > 0 ? (
+                  <div className="rounded-md border">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="px-4 py-2 text-left">Tên</th>
+                            <th className="px-4 py-2 text-left">Namespace</th>
+                            <th className="px-4 py-2 text-left">Status</th>
+                            <th className="px-4 py-2 text-left">IP</th>
+                            <th className="px-4 py-2 text-left">Age</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedNode.pods.map((pod) => (
+                            <tr key={`${pod.namespace}-${pod.name}`} className="border-t">
+                              <td className="px-4 py-2 font-medium">{pod.name}</td>
+                              <td className="px-4 py-2">{pod.namespace}</td>
+                              <td className="px-4 py-2 capitalize">{pod.status}</td>
+                              <td className="px-4 py-2">{pod.ip ?? "-"}</td>
+                              <td className="px-4 py-2">{pod.age ?? "-"}</td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {selectedNode.pods.map((pod) => (
-                              <tr key={`${pod.namespace}-${pod.name}`} className="border-t">
-                                <td className="px-4 py-2 font-medium">{pod.name}</td>
-                                <td className="px-4 py-2">{pod.namespace}</td>
-                                <td className="px-4 py-2 capitalize">{pod.status}</td>
-                                <td className="px-4 py-2">{pod.ip ?? "-"}</td>
-                                <td className="px-4 py-2">{pod.age ?? "-"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ) : (
-                    <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
-                      Node chưa có danh sách pods hoặc dữ liệu chưa được đồng bộ.
-                    </div>
-                  )}
-                </TabsContent>
+                  </div>
+                ) : (
+                  <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
+                    Node chưa có danh sách pods hoặc dữ liệu chưa được đồng bộ.
+                  </div>
+                )}
+              </TabsContent>
 
                 <TabsContent value="labels">
-                  {selectedNode.labels && Object.keys(selectedNode.labels).length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(selectedNode.labels).map(([key, value]) => (
-                        <Badge key={key} variant="secondary">
-                          {key}: {value}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
-                      Node chưa có labels hiển thị.
-                    </div>
-                  )}
-                </TabsContent>
+                {selectedNode.labels && Object.keys(selectedNode.labels).length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(selectedNode.labels).map(([key, value]) => (
+                      <Badge key={key} variant="secondary">
+                        {key}: {value}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
+                    Node chưa có labels hiển thị.
+                  </div>
+                )}
+              </TabsContent>
 
                 <TabsContent value="yaml">
-                  <div className="rounded-md border bg-muted/40 p-4">
-                    <pre className="max-h-80 overflow-auto text-xs">
-                      {selectedNode.yaml ? selectedNode.yaml : "Chưa có YAML cho node này."}
-                    </pre>
-                  </div>
+                <div className="rounded-md border bg-muted/40 p-4">
+                  <pre className="max-h-80 overflow-auto text-xs">
+                    {selectedNode.yaml ? selectedNode.yaml : "Chưa có YAML cho node này."}
+                  </pre>
+                </div>
                 </TabsContent>
               </Tabs>
             </div>
@@ -1393,7 +1393,7 @@ export function Nodes() {
                 : "Chọn các hosts chưa nằm trong cluster để gán vào cluster. Chỉ có thể gán hosts với role MASTER hoặc WORKER."}
             </DialogDescription>
           </DialogHeader>
-
+          
           <Tabs value={createMode} onValueChange={async (value) => {
             setCreateMode(value as "create" | "assign");
             // Load servers khi chuyển sang tab "assign"
@@ -1405,144 +1405,144 @@ export function Nodes() {
               <TabsTrigger value="create">Tạo host mới</TabsTrigger>
               <TabsTrigger value="assign">Gán host đã có</TabsTrigger>
             </TabsList>
-
+          
             {/* Tab 1: Tạo host mới */}
             <TabsContent value="create" className="flex-1 flex flex-col overflow-hidden mt-4">
               <form onSubmit={handleCreateServer} className="flex flex-col flex-1 min-h-0 space-y-4">
                 {/* Tên host - hiển thị ở trên cùng, không trong tab */}
                 <div className="space-y-2 flex-shrink-0">
-                  <Label htmlFor="name" className="text-sm font-medium flex items-center gap-2">
-                    <ServerIcon className="h-3.5 w-3.5" />
+              <Label htmlFor="name" className="text-sm font-medium flex items-center gap-2">
+                <ServerIcon className="h-3.5 w-3.5" />
                     Host Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              </Label>
+              <Input
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="host-01, master-node, worker-01..."
-                    className="h-10"
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">
+                className="h-10"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
                     Tên hiển thị để dễ dàng nhận biết host
-                  </p>
+              </p>
+    </div>
+
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-1 min-h-0">
+              <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
+                <TabsTrigger value="connection" className="flex items-center gap-2">
+                  <Network className="h-4 w-4" />
+                  Thông tin kết nối
+                </TabsTrigger>
+                <TabsTrigger value="configuration" className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                      Vai trò
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Tab 1: Thông tin kết nối SSH */}
+              <TabsContent value="connection" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-1">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ipAddress" className="text-sm font-medium flex items-center gap-2">
+                      <Network className="h-3.5 w-3.5" />
+                      IP Address <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="ipAddress"
+                      name="ipAddress"
+                      type="text"
+                      value={formData.ipAddress}
+                      onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
+                      placeholder="192.168.1.10"
+                      className="h-10 font-mono"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Địa chỉ IP hoặc hostname
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="port" className="text-sm font-medium">
+                      Port SSH <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="port"
+                      name="port"
+                      type="number"
+                      value={formData.port}
+                      onChange={(e) => setFormData({ ...formData, port: e.target.value })}
+                      placeholder="22"
+                      className="h-10"
+                      min="1"
+                      max="65535"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Port SSH (mặc định: 22)
+                    </p>
+                  </div>
                 </div>
 
-                {/* Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-1 min-h-0">
-                  <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
-                    <TabsTrigger value="connection" className="flex items-center gap-2">
-                      <Network className="h-4 w-4" />
-                      Thông tin kết nối
-                    </TabsTrigger>
-                    <TabsTrigger value="configuration" className="flex items-center gap-2">
-                      <Settings className="h-4 w-4" />
-                      Vai trò
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* Tab 1: Thông tin kết nối SSH */}
-                  <TabsContent value="connection" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-1">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="ipAddress" className="text-sm font-medium flex items-center gap-2">
-                          <Network className="h-3.5 w-3.5" />
-                          IP Address <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="ipAddress"
-                          name="ipAddress"
-                          type="text"
-                          value={formData.ipAddress}
-                          onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
-                          placeholder="192.168.1.10"
-                          className="h-10 font-mono"
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Địa chỉ IP hoặc hostname
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="port" className="text-sm font-medium">
-                          Port SSH <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="port"
-                          name="port"
-                          type="number"
-                          value={formData.port}
-                          onChange={(e) => setFormData({ ...formData, port: e.target.value })}
-                          placeholder="22"
-                          className="h-10"
-                          min="1"
-                          max="65535"
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Port SSH (mặc định: 22)
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="username" className="text-sm font-medium flex items-center gap-2">
-                          <User className="h-3.5 w-3.5" />
-                          Username <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="username"
-                          name="username"
-                          type="text"
-                          value={formData.username}
-                          onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                          placeholder="root, ubuntu..."
-                          className="h-10"
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Tên người dùng SSH
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="password" className="text-sm font-medium flex items-center gap-2">
-                          <Lock className="h-3.5 w-3.5" />
-                          Password <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="password"
-                          name="password"
-                          type="password"
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          placeholder="••••••••"
-                          className="h-10"
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Password sẽ được dùng để tự động tạo SSH key
-                        </p>
-                      </div>
-                    </div>
-                  </TabsContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="username" className="text-sm font-medium flex items-center gap-2">
+                      <User className="h-3.5 w-3.5" />
+                      Username <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="username"
+                      name="username"
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      placeholder="root, ubuntu..."
+                      className="h-10"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Tên người dùng SSH
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-sm font-medium flex items-center gap-2">
+                      <Lock className="h-3.5 w-3.5" />
+                      Password <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="••••••••"
+                      className="h-10"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Password sẽ được dùng để tự động tạo SSH key
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>  
 
                   {/* Tab 2: Cấu hình Host */}
-                  <TabsContent value="configuration" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-1">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="role" className="text-sm font-medium">
-                          Role <span className="text-destructive">*</span>
-                        </Label>
-                        <select
-                          id="role"
-                          name="role"
-                          value={formData.role}
-                          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                          className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          required
-                        >
+              <TabsContent value="configuration" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-1">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="role" className="text-sm font-medium">
+                      Role <span className="text-destructive">*</span>
+                    </Label>
+                    <select
+                      id="role"
+                      name="role"
+                      value={formData.role}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      required
+                    >
                           <option
                             value="MASTER"
                             disabled={!isRoleAvailable("MASTER")}
@@ -1557,30 +1557,30 @@ export function Nodes() {
                           >
                             WORKER - Worker Node (Không giới hạn)
                           </option>
-                        </select>
-                        <p className="text-xs text-muted-foreground">
+                    </select>
+                    <p className="text-xs text-muted-foreground">
                           Vai trò của host trong hệ thống
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="clusterStatus" className="text-sm font-medium">
-                          Cluster Status <span className="text-destructive">*</span>
-                        </Label>
-                        <select
-                          id="clusterStatus"
-                          name="clusterStatus"
-                          value={formData.clusterStatus}
-                          onChange={(e) => setFormData({ ...formData, clusterStatus: e.target.value })}
-                          className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          required
-                        >
-                          <option value="AVAILABLE">AVAILABLE - Sẵn sàng trong cluster</option>
-                          <option value="UNAVAILABLE">UNAVAILABLE - Không sẵn sàng</option>
-                        </select>
-                        <p className="text-xs text-muted-foreground">
-                          Trạng thái tham gia vào Kubernetes cluster
-                        </p>
-                      </div>
+                    </p>
+                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clusterStatus" className="text-sm font-medium">
+                    Cluster Status <span className="text-destructive">*</span>
+                  </Label>
+                  <select
+                    id="clusterStatus"
+                    name="clusterStatus"
+                    value={formData.clusterStatus}
+                    onChange={(e) => setFormData({ ...formData, clusterStatus: e.target.value })}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    required
+                  >
+                    <option value="AVAILABLE">AVAILABLE - Sẵn sàng trong cluster</option>
+                    <option value="UNAVAILABLE">UNAVAILABLE - Không sẵn sàng</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Trạng thái tham gia vào Kubernetes cluster
+                  </p>
+                </div>
                     </div>
                     {/* Thông báo giới hạn role */}
                     {/* {!isRoleAvailable("MASTER") && (
@@ -1595,243 +1595,243 @@ export function Nodes() {
                     </div>
                   </div>
                 )} */}
-                  </TabsContent>
-                </Tabs>
+              </TabsContent>
+            </Tabs>
 
-                {/* Footer buttons */}
-                <div className="flex justify-between items-center pt-4 border-t flex-shrink-0">
-                  {/* Test SSH Button */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleTestSsh}
-                    disabled={isTestingSsh || isSubmitting}
-                    className="min-w-[160px]"
-                  >
-                    {isTestingSsh ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Đang kiểm tra...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Kiểm tra kết nối SSH
-                      </>
-                    )}
-                  </Button>
-
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsCreateDialogOpen(false)}
-                      className="min-w-[100px]"
-                      disabled={isSubmitting || isTestingSsh}
-                    >
-                      Hủy
-                    </Button>
-                    <Button type="submit" className="min-w-[120px]" disabled={isSubmitting || isTestingSsh}>
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Đang tạo...
-                        </>
-                      ) : (
-                        <>
-                          <ServerIcon className="mr-2 h-4 w-4" />
+            {/* Footer buttons */}
+            <div className="flex justify-between items-center pt-4 border-t flex-shrink-0">
+              {/* Test SSH Button */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTestSsh}
+                disabled={isTestingSsh || isSubmitting}
+                className="min-w-[160px]"
+              >
+                {isTestingSsh ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang kiểm tra...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Kiểm tra kết nối SSH
+                  </>
+                )}
+              </Button>
+              
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                  className="min-w-[100px]"
+                  disabled={isSubmitting || isTestingSsh}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" className="min-w-[120px]" disabled={isSubmitting || isTestingSsh}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Đang tạo...
+                    </>
+                  ) : (
+                    <>
+                      <ServerIcon className="mr-2 h-4 w-4" />
                           Thêm host
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </TabsContent>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+          </TabsContent>
 
             {/* Tab 2: Gán host đã có */}
-            <TabsContent value="assign" className="flex-1 flex flex-col overflow-hidden mt-4">
-              <div className="flex-1 flex flex-col space-y-4">
-                {/* Search trong modal */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm server..."
-                    value={assignSearchQuery}
-                    onChange={(e) => setAssignSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+          <TabsContent value="assign" className="flex-1 flex flex-col overflow-hidden mt-4">
+            <div className="flex-1 flex flex-col space-y-4">
+              {/* Search trong modal */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Tìm kiếm server..."
+                  value={assignSearchQuery}
+                  onChange={(e) => setAssignSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
 
-                {/* Danh sách servers chưa trong cluster */}
-                <div className="border rounded-lg overflow-hidden flex-1 flex flex-col min-h-0">
-                  <div className="overflow-y-auto flex-1" style={{ maxHeight: "400px" }}>
-                    {loadingServers ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                        <span className="text-sm text-muted-foreground">Đang tải danh sách servers...</span>
-                      </div>
-                    ) : filteredAvailableServers.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        {availableServers.length === 0
-                          ? "Không có server nào chưa trong cluster"
-                          : "Không tìm thấy server nào"}
-                      </div>
-                    ) : (
-                      <table className="w-full">
-                        <thead className="bg-muted sticky top-0">
-                          <tr>
-                            <th className="p-3 text-left w-12">
-                              <Checkbox
-                                checked={
-                                  filteredAvailableServers.filter((s) => canAssignServerToCluster(s)).length > 0 &&
-                                  filteredAvailableServers
-                                    .filter((s) => canAssignServerToCluster(s))
-                                    .every((s) => selectedServers.has(s.id))
+              {/* Danh sách servers chưa trong cluster */}
+              <div className="border rounded-lg overflow-hidden flex-1 flex flex-col min-h-0">
+                <div className="overflow-y-auto flex-1" style={{ maxHeight: "400px" }}>
+                  {loadingServers ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      <span className="text-sm text-muted-foreground">Đang tải danh sách servers...</span>
+                    </div>
+                  ) : filteredAvailableServers.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                      {availableServers.length === 0
+                        ? "Không có server nào chưa trong cluster"
+                        : "Không tìm thấy server nào"}
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead className="bg-muted sticky top-0">
+                        <tr>
+                          <th className="p-3 text-left w-12">
+                            <Checkbox
+                              checked={
+                                filteredAvailableServers.filter((s) => canAssignServerToCluster(s)).length > 0 &&
+                                filteredAvailableServers
+                                  .filter((s) => canAssignServerToCluster(s))
+                                  .every((s) => selectedServers.has(s.id))
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const assignableServers = filteredAvailableServers.filter((s) => canAssignServerToCluster(s));
+                                  const allIds = new Set(assignableServers.map((s) => s.id));
+                                  setSelectedServers(allIds);
+                                  const roles: Record<string, string> = { ...serverRoles };
+                                  assignableServers.forEach((s) => {
+                                    if (!roles[s.id]) {
+                                      const currentRole = s.role?.toUpperCase() || "WORKER";
+                                      const role = (currentRole === "MASTER" || currentRole === "WORKER")
+                                        ? currentRole
+                                        : "WORKER";
+                                      roles[s.id] = role;
+                                    }
+                                  });
+                                  setServerRoles(roles);
+                                } else {
+                                  setSelectedServers(new Set());
                                 }
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    const assignableServers = filteredAvailableServers.filter((s) => canAssignServerToCluster(s));
-                                    const allIds = new Set(assignableServers.map((s) => s.id));
-                                    setSelectedServers(allIds);
-                                    const roles: Record<string, string> = { ...serverRoles };
-                                    assignableServers.forEach((s) => {
-                                      if (!roles[s.id]) {
-                                        const currentRole = s.role?.toUpperCase() || "WORKER";
-                                        const role = (currentRole === "MASTER" || currentRole === "WORKER")
-                                          ? currentRole
-                                          : "WORKER";
-                                        roles[s.id] = role;
-                                      }
-                                    });
-                                    setServerRoles(roles);
-                                  } else {
-                                    setSelectedServers(new Set());
-                                  }
-                                }}
-                              />
-                            </th>
-                            <th className="p-3 text-left">Tên</th>
-                            <th className="p-3 text-left">IP Address</th>
-                            <th className="p-3 text-left">Port</th>
-                            <th className="p-3 text-left">Role</th>
-                            <th className="p-3 text-left">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredAvailableServers.map((server) => {
-                            const canAssign = canAssignServerToCluster(server);
-                            return (
-                              <tr
-                                key={server.id}
+                              }}
+                            />
+                          </th>
+                          <th className="p-3 text-left">Tên</th>
+                          <th className="p-3 text-left">IP Address</th>
+                          <th className="p-3 text-left">Port</th>
+                          <th className="p-3 text-left">Role</th>
+                          <th className="p-3 text-left">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAvailableServers.map((server) => {
+                          const canAssign = canAssignServerToCluster(server);
+                          return (
+                            <tr
+                              key={server.id}
                                 className={`border-t ${!canAssign
                                   ? "opacity-50 bg-muted/20"
                                   : selectedServers.has(server.id)
-                                    ? "bg-muted/30 hover:bg-muted/50"
-                                    : "hover:bg-muted/50"
-                                  }`}
-                              >
-                                <td className="p-3">
-                                  <Checkbox
-                                    checked={selectedServers.has(server.id)}
-                                    onChange={(e) => handleToggleServer(server.id, e.target.checked)}
-                                    disabled={!canAssign}
-                                  />
-                                </td>
-                                <td className="p-3 font-medium">
-                                  {server.name}
-                                  {!canAssign && (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      (Không thể gán vào cluster)
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3 font-mono text-sm">{server.ipAddress}</td>
-                                <td className="p-3">{server.port}</td>
-                                <td className="p-3">
-                                  {selectedServers.has(server.id) && canAssign ? (
-                                    <select
-                                      value={serverRoles[server.id] || server.role?.toUpperCase() || "WORKER"}
-                                      onChange={(e) => handleRoleChange(server.id, e.target.value)}
+                                  ? "bg-muted/30 hover:bg-muted/50"
+                                  : "hover:bg-muted/50"
+                              }`}
+                            >
+                              <td className="p-3">
+                                <Checkbox
+                                  checked={selectedServers.has(server.id)}
+                                  onChange={(e) => handleToggleServer(server.id, e.target.checked)}
+                                  disabled={!canAssign}
+                                />
+                              </td>
+                              <td className="p-3 font-medium">
+                                {server.name}
+                                {!canAssign && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    (Không thể gán vào cluster)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono text-sm">{server.ipAddress}</td>
+                              <td className="p-3">{server.port}</td>
+                              <td className="p-3">
+                                {selectedServers.has(server.id) && canAssign ? (
+                                  <select
+                                    value={serverRoles[server.id] || server.role?.toUpperCase() || "WORKER"}
+                                    onChange={(e) => handleRoleChange(server.id, e.target.value)}
                                       className={`flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-xs font-medium ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-w-[120px] ${(serverRoles[server.id] || server.role?.toUpperCase() || "WORKER") === "MASTER"
                                         ? "border-yellow-500/50 bg-yellow-500/5"
                                         : "border-blue-500/50 bg-blue-500/5"
-                                        }`}
-                                    >
-                                      <option value="MASTER">MASTER</option>
-                                      <option value="WORKER">WORKER</option>
-                                    </select>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      {server.role && (server.role.toUpperCase() === "MASTER" || server.role.toUpperCase() === "WORKER") ? (
-                                        <Badge
-                                          variant="outline"
+                                    }`}
+                                  >
+                                    <option value="MASTER">MASTER</option>
+                                    <option value="WORKER">WORKER</option>
+                                  </select>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    {server.role && (server.role.toUpperCase() === "MASTER" || server.role.toUpperCase() === "WORKER") ? (
+                                      <Badge
+                                        variant="outline"
                                           className={`text-xs font-medium ${server.role.toUpperCase() === "MASTER"
                                             ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-500"
                                             : "border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-500"
-                                            }`}
-                                        >
-                                          {server.role.toUpperCase()}
-                                        </Badge>
-                                      ) : (
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-xs font-medium opacity-50"
-                                        >
-                                          {server.role?.toUpperCase() || "N/A"}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3">
-                                  <Badge variant={server.status === "online" ? "default" : "secondary"}>
-                                    {server.status}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-
-                {/* Footer với thông tin và nút */}
-                <div className="flex items-center justify-between pt-4 border-t flex-shrink-0">
-                  <div className="text-sm text-muted-foreground">
-                    Đã chọn: {selectedServers.size} server
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsCreateDialogOpen(false)}
-                      disabled={isAssigning}
-                    >
-                      Hủy
-                    </Button>
-                    <Button
-                      onClick={handleAssignServers}
-                      disabled={isAssigning || selectedServers.size === 0}
-                    >
-                      {isAssigning ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Đang gán...
-                        </>
-                      ) : (
-                        <>
-                          <ServerIcon className="h-4 w-4 mr-2" />
-                          Gán vào cluster ({selectedServers.size})
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                                        }`}
+                                      >
+                                        {server.role.toUpperCase()}
+                                      </Badge>
+                                    ) : (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-xs font-medium opacity-50"
+                                      >
+                                        {server.role?.toUpperCase() || "N/A"}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                <Badge variant={server.status === "online" ? "default" : "secondary"}>
+                                  {server.status}
+                                </Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
-            </TabsContent>
-          </Tabs>
+
+              {/* Footer với thông tin và nút */}
+              <div className="flex items-center justify-between pt-4 border-t flex-shrink-0">
+                <div className="text-sm text-muted-foreground">
+                  Đã chọn: {selectedServers.size} server
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    disabled={isAssigning}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    onClick={handleAssignServers}
+                    disabled={isAssigning || selectedServers.size === 0}
+                  >
+                    {isAssigning ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Đang gán...
+                      </>
+                    ) : (
+                      <>
+                        <ServerIcon className="h-4 w-4 mr-2" />
+                        Gán vào cluster ({selectedServers.size})
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
         </DialogContent>
       </Dialog>
 
@@ -1852,7 +1852,7 @@ export function Nodes() {
               Node "{nodeToCreate?.name}" chưa có trong hệ thống. Vui lòng nhập thông tin SSH để tạo host mới và gán vào cluster.
             </DialogDescription>
           </DialogHeader>
-
+          
           {nodeToCreate && (
             <form onSubmit={handleCreateServerFromNode} className="space-y-4">
               <div className="space-y-4">

@@ -1218,19 +1218,25 @@ export const adminAPI = {
     const response = await api.get("/admin/storage/pvcs");
     const pvcListResponse = response.data;
     
-    return pvcListResponse.pvcs.map((pvc: any) => ({
-      id: buildScopedId(pvc.namespace, pvc.name),
-      name: pvc.name,
-      namespace: pvc.namespace,
-      status: pvc.status === "lost" ? "lost" : pvc.status === "bound" ? "bound" : "pending",
-      volume: pvc.volume || undefined,
-      capacity: pvc.capacity || "",
-      accessModes: pvc.accessModes || [],
-      storageClass: pvc.storageClass || "",
-      volumeAttributesClass: pvc.volumeAttributesClass || undefined,
-      volumeMode: pvc.volumeMode || undefined,
-      age: pvc.age || "",
-    }));
+    return pvcListResponse.pvcs.map((pvc: any) => {
+      // Giữ nguyên status từ API (Bound, Pending, Lost) - không convert về lowercase
+      // Backend trả về status với chữ hoa đầu (Bound, Pending, Lost)
+      const status = pvc.status || "Pending";
+      
+      return {
+        id: buildScopedId(pvc.namespace, pvc.name),
+        name: pvc.name,
+        namespace: pvc.namespace,
+        status: status, // Giữ nguyên case từ API
+        volume: pvc.volume || undefined,
+        capacity: pvc.capacity || "",
+        accessModes: pvc.accessModes || [],
+        storageClass: pvc.storageClass || "",
+        volumeAttributesClass: pvc.volumeAttributesClass || undefined,
+        volumeMode: pvc.volumeMode || undefined,
+        age: pvc.age || "",
+      };
+    });
   },
   getPVCDetail: async (id: string): Promise<PVCDetail> => {
     const { namespace, name } = parseScopedId(id);

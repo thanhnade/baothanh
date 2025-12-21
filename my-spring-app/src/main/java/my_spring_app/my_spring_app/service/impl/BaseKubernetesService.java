@@ -7,9 +7,11 @@ import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.util.Config;
 import io.kubernetes.client.openapi.models.V1Node;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,6 +44,7 @@ public abstract class BaseKubernetesService {
 
     protected String executeCommand(Session session, String command, boolean ignoreNonZeroExit) throws Exception {
         ChannelExec channelExec = null;
+        BufferedReader reader = null;
         try {
             channelExec = (ChannelExec) session.openChannel("exec");
             channelExec.setCommand(command);
@@ -50,25 +53,36 @@ public abstract class BaseKubernetesService {
             InputStream inputStream = channelExec.getInputStream();
             channelExec.connect();
 
+            // Đọc output theo từng dòng
+            reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
             StringBuilder output = new StringBuilder();
-            byte[] buffer = new byte[1024];
+            String line;
+            
+            // Đợi channel kết nối và bắt đầu đọc
             while (true) {
-                while (inputStream.available() > 0) {
-                    int bytesRead = inputStream.read(buffer, 0, 1024);
-                    if (bytesRead < 0) {
-                        break;
-                    }
-                    output.append(new String(buffer, 0, bytesRead, StandardCharsets.UTF_8));
-                    System.out.println("[executeCommand] Output: " + new String(buffer, 0, bytesRead, StandardCharsets.UTF_8));
-                }
-
+                // Kiểm tra nếu channel đã đóng
                 if (channelExec.isClosed()) {
-                    if (inputStream.available() > 0) {
-                        continue;
+                    // Đọc tất cả các dòng còn lại
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
+                        System.out.println(line);
                     }
                     break;
                 }
-                Thread.sleep(100);
+                
+                // Đọc dòng nếu có sẵn (non-blocking check)
+                if (inputStream.available() > 0) {
+                    // Đọc từng dòng, readLine() sẽ block cho đến khi có dòng hoàn chỉnh hoặc stream đóng
+                    // Nhưng vì đã check available() > 0, nên sẽ có dữ liệu
+                    line = reader.readLine();
+                    if (line != null) {
+                        output.append(line).append("\n");
+                        System.out.println(line);
+                    }
+                } else {
+                    // Không có dữ liệu sẵn, đợi một chút
+                    Thread.sleep(100);
+                }
             }
 
             int exitStatus = channelExec.getExitStatus();
@@ -78,6 +92,13 @@ public abstract class BaseKubernetesService {
             }
             return result;
         } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
             if (channelExec != null && channelExec.isConnected()) {
                 channelExec.disconnect();
             }

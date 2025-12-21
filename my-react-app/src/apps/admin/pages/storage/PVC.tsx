@@ -318,12 +318,23 @@ export function PVCList() {
       label: "Status",
       align: "center" as const,
       render: (pvc: PVC) => {
-        const statusLower = pvc.status?.toLowerCase() || "pending";
-        const variant = 
-          statusLower === "bound" ? "success" 
-          : statusLower === "lost" ? "destructive" 
-          : "warning";
-        const displayText = pvc.status || "Pending";
+        // Xử lý status: API trả về "Bound", "Pending", "Lost", etc.
+        const status = pvc.status?.trim() || "";
+        const statusLower = status.toLowerCase();
+        
+        // Xác định variant dựa trên status
+        let variant: "success" | "destructive" | "warning" = "warning";
+        if (statusLower === "bound") {
+          variant = "success";
+        } else if (statusLower === "lost") {
+          variant = "destructive";
+        } else {
+          // Pending, hoặc các status khác
+          variant = "warning";
+        }
+        
+        // Hiển thị status gốc từ API (giữ nguyên chữ hoa/thường)
+        const displayText = status || "Pending";
         return <Badge variant={variant}>{displayText}</Badge>;
       },
     },
@@ -420,9 +431,9 @@ export function PVCList() {
                       <Label className="text-muted-foreground">Status</Label>
                       <Badge
                         variant={
-                          pvcDetail.status?.toLowerCase() === "bound"
+                          pvcDetail.status?.toLowerCase().trim() === "bound"
                             ? "success"
-                            : pvcDetail.status?.toLowerCase() === "lost"
+                            : pvcDetail.status?.toLowerCase().trim() === "lost"
                             ? "destructive"
                             : "warning"
                         }
