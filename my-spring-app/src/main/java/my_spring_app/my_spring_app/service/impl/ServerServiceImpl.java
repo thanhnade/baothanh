@@ -704,8 +704,8 @@ public class ServerServiceImpl implements ServerService {
 
         String metricsCommand = "echo \"CPU_CORES:$(nproc || echo '0')\"; " +
                 "echo \"CPU_LOAD:$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | tr -d ',' || echo '0')\"; " +
-                "echo \"RAM_TOTAL_BYTES:$(free -b 2>/dev/null | awk '/^Mem:/{print $2}' || echo '0')\"; " +
-                "echo \"RAM_USED_BYTES:$(free -b 2>/dev/null | awk '/^Mem:/{print $3}' || echo '0')\"; " +
+                "echo \"RAM_TOTAL_BYTES:$(free -b 2>/dev/null | awk 'NR==2{print $2}' || echo '0')\"; " +
+                "echo \"RAM_USED_BYTES:$(free -b 2>/dev/null | awk 'NR==2{print $3}' || echo '0')\"; " +
                 "echo \"DISK_TOTAL_KB:$(df / 2>/dev/null | awk 'NR==2{print $2}' || echo '0')\"; " +
                 "echo \"DISK_USED_KB:$(df / 2>/dev/null | awk 'NR==2{print $3}' || echo '0')\"";
         
