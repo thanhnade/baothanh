@@ -530,9 +530,11 @@ public class ServerServiceImpl implements ServerService {
         response.setClusterStatus(server.getClusterStatus());
         response.setCreatedAt(server.getCreatedAt());
         response.setCpuCores(server.getCpuCores());
+        response.setCpuUsed(server.getCpuUsed());
         response.setRamTotal(server.getRamTotal());
+        response.setRamUsed(server.getRamUsed());
         response.setDiskTotal(server.getDiskTotal());
-        // Không set used - các giá trị này sẽ lấy trực tiếp từ SSH khi cần
+        response.setDiskUsed(server.getDiskUsed());
         return response;
     }
     
@@ -1151,11 +1153,14 @@ public class ServerServiceImpl implements ServerService {
                             password
                         );
                         
-                        // Lưu metrics vào updateInfo (chỉ total, không lưu used)
+                        // Lưu metrics vào updateInfo (cả total và used)
                         if (metrics != null) {
                             updateInfo.cpuCores = metrics.get("cpuCores");
+                            updateInfo.cpuUsed = metrics.get("cpuUsed");
                             updateInfo.ramTotal = metrics.get("ramTotal");
+                            updateInfo.ramUsed = metrics.get("ramUsed");
                             updateInfo.diskTotal = metrics.get("diskTotal");
+                            updateInfo.diskUsed = metrics.get("diskUsed");
                             System.out.println("[checkAllServers] Da lay metrics thanh cong cho server ID " + serverId + " (" + ip + ")");
                         } else {
                             // Bao loi khi khong lay duoc metrics
@@ -1244,13 +1249,16 @@ public class ServerServiceImpl implements ServerService {
     
     /**
      * Helper class để lưu thông tin update từ các thread
-     * Chỉ lưu total metrics, không lưu used (used sẽ lấy trực tiếp từ SSH khi cần)
+     * Lưu cả total và used metrics
      */
     private static class ServerUpdateInfo {
         ServerEntity.ServerStatus status;
         String cpuCores;
+        String cpuUsed;
         String ramTotal;
+        String ramUsed;
         String diskTotal;
+        String diskUsed;
     }
     
     /**
@@ -1272,28 +1280,40 @@ public class ServerServiceImpl implements ServerService {
                 server.setStatus(updateInfo.status);
             }
             
-            // Cập nhật metrics nếu có (chỉ total, không lưu used)
+            // Cập nhật metrics nếu có
             boolean metricsUpdated = false;
             if (updateInfo.cpuCores != null) {
                 server.setCpuCores(updateInfo.cpuCores);
+                metricsUpdated = true;
+            }
+            if (updateInfo.cpuUsed != null) {
+                server.setCpuUsed(updateInfo.cpuUsed);
                 metricsUpdated = true;
             }
             if (updateInfo.ramTotal != null) {
                 server.setRamTotal(updateInfo.ramTotal);
                 metricsUpdated = true;
             }
+            if (updateInfo.ramUsed != null) {
+                server.setRamUsed(updateInfo.ramUsed);
+                metricsUpdated = true;
+            }
             if (updateInfo.diskTotal != null) {
                 server.setDiskTotal(updateInfo.diskTotal);
+                metricsUpdated = true;
+            }
+            if (updateInfo.diskUsed != null) {
+                server.setDiskUsed(updateInfo.diskUsed);
                 metricsUpdated = true;
             }
             
             // Lưu vào database
             serverRepository.save(server);
             if (metricsUpdated) {
-                System.out.println("[updateServersInTransaction] Da luu metrics vao database cho server ID " + serverId + 
-                                  " (CPU: " + updateInfo.cpuCores + 
-                                  ", RAM: " + updateInfo.ramTotal + 
-                                  ", Disk: " + updateInfo.diskTotal + ")");
+                System.out.println("[updateServersInTransaction] Da luu metrics vao database cho server ID " + serverId +
+                                  " (CPU: " + updateInfo.cpuCores + " cores, load: " + updateInfo.cpuUsed +
+                                  ", RAM: " + updateInfo.ramTotal + " total, " + updateInfo.ramUsed + " used" +
+                                  ", Disk: " + updateInfo.diskTotal + " total, " + updateInfo.diskUsed + " used)");
             }
         }
     }

@@ -49,10 +49,13 @@ export const infrastructureAPI = {
       return servers.map((server: any) => {
         // Parse CPU cores, RAM, Disk từ string sang number
         const cpuCores = server.cpuCores ? parseInt(server.cpuCores) || 0 : 0;
+        const cpuUsed = server.cpuUsed ? parseFloat(server.cpuUsed) || 0 : 0;
         // Parse RAM và Disk từ backend (backend trả về GiB)
         const ramTotal = parseSizeToGiB(server.ramTotal);
+        const ramUsed = parseSizeToGiB(server.ramUsed);
         const diskTotal = parseSizeToGiB(server.diskTotal);
-        
+        const diskUsed = parseSizeToGiB(server.diskUsed);
+
         // Map status từ backend (ONLINE/OFFLINE/DISABLED) sang frontend ("online" | "offline" | "disabled")
         // Nếu có status thì dùng, nếu không thì map từ serverStatus
         let status: "online" | "offline" | "disabled" = "offline";
@@ -67,7 +70,7 @@ export const infrastructureAPI = {
         } else {
             status = server.serverStatus === "RUNNING" ? "online" : "offline";
         }
-        
+
         return {
           id: String(server.id),
           name: server.name,
@@ -79,12 +82,15 @@ export const infrastructureAPI = {
           serverStatus: server.serverStatus,
           clusterStatus: server.clusterStatus,
           cpu: {
+            used: status === "online" && cpuUsed > 0 ? cpuUsed : undefined,
             total: cpuCores > 0 ? cpuCores : "-",
           },
           memory: {
+            used: status === "online" && ramUsed > 0 ? ramUsed : undefined,
             total: ramTotal > 0 ? ramTotal : "-",
           },
           disk: {
+            used: status === "online" && diskUsed > 0 ? diskUsed : undefined,
             total: diskTotal > 0 ? diskTotal : "-",
           },
           os: "Ubuntu 22.04", // Default, có thể lấy từ server sau
@@ -106,14 +112,17 @@ export const infrastructureAPI = {
     try {
       const response = await api.get(`/servers/${id}`);
       const server = response.data;
-      
+
       // Map từ backend response sang frontend Server type
       const cpuCores = server.cpuCores ? parseInt(server.cpuCores) || 0 : 0;
+      const cpuUsed = server.cpuUsed ? parseFloat(server.cpuUsed) || 0 : 0;
       // Parse RAM và Disk từ backend (backend trả về GiB)
       const ramTotal = parseSizeToGiB(server.ramTotal);
+      const ramUsed = parseSizeToGiB(server.ramUsed);
       const diskTotal = parseSizeToGiB(server.diskTotal);
+      const diskUsed = parseSizeToGiB(server.diskUsed);
       const status = server.serverStatus === "RUNNING" ? "online" : "offline";
-      
+
       return {
         id: String(server.id),
         name: server.name,
@@ -125,12 +134,15 @@ export const infrastructureAPI = {
         serverStatus: server.serverStatus,
         clusterStatus: server.clusterStatus,
         cpu: {
+          used: status === "online" && cpuUsed > 0 ? cpuUsed : undefined,
           total: cpuCores > 0 ? cpuCores : "-",
         },
         memory: {
+          used: status === "online" && ramUsed > 0 ? ramUsed : undefined,
           total: ramTotal > 0 ? ramTotal : "-",
         },
         disk: {
+          used: status === "online" && diskUsed > 0 ? diskUsed : undefined,
           total: diskTotal > 0 ? diskTotal : "-",
         },
         os: "Ubuntu 22.04",
@@ -178,10 +190,13 @@ export const infrastructureAPI = {
         status = "offline";
       }
       const cpuCores = server.cpuCores ? parseInt(server.cpuCores) || 0 : 0;
+      const cpuUsed = server.cpuUsed ? parseFloat(server.cpuUsed) || 0 : 0;
       // Parse RAM và Disk từ backend (backend trả về GiB)
       const ramTotal = parseSizeToGiB(server.ramTotal);
+      const ramUsed = parseSizeToGiB(server.ramUsed);
       const diskTotal = parseSizeToGiB(server.diskTotal);
-      
+      const diskUsed = parseSizeToGiB(server.diskUsed);
+
       return {
         id: String(server.id),
         name: server.name,
@@ -193,12 +208,15 @@ export const infrastructureAPI = {
         serverStatus: server.serverStatus,
         clusterStatus: server.clusterStatus,
         cpu: {
+          used: status === "online" && cpuUsed > 0 ? cpuUsed : undefined,
           total: cpuCores > 0 ? cpuCores : "-",
         },
         memory: {
+          used: status === "online" && ramUsed > 0 ? ramUsed : undefined,
           total: ramTotal > 0 ? ramTotal : "-",
         },
         disk: {
+          used: status === "online" && diskUsed > 0 ? diskUsed : undefined,
           total: diskTotal > 0 ? diskTotal : "-",
         },
         os: data.os || "Ubuntu 22.04",
@@ -335,8 +353,11 @@ export const infrastructureAPI = {
       return {
         servers: serversData.map((server: any) => {
           const cpuCores = server.cpuCores ? parseInt(server.cpuCores) || 0 : 0;
+          const cpuUsed = server.cpuUsed ? parseFloat(server.cpuUsed) || 0 : 0;
           const ramTotal = parseSizeToGiB(server.ramTotal);
+          const ramUsed = parseSizeToGiB(server.ramUsed);
           const diskTotal = parseSizeToGiB(server.diskTotal);
+          const diskUsed = parseSizeToGiB(server.diskUsed);
           let status: "online" | "offline" | "disabled" = "offline";
           if (server.status === "ONLINE") {
             status = "online";
@@ -345,7 +366,7 @@ export const infrastructureAPI = {
           } else {
             status = "offline";
           }
-          
+
           return {
             id: String(server.id),
             name: server.name,
@@ -357,12 +378,15 @@ export const infrastructureAPI = {
             serverStatus: server.serverStatus,
             clusterStatus: server.clusterStatus,
             cpu: {
+              used: status === "online" && cpuUsed > 0 ? cpuUsed : undefined,
               total: cpuCores > 0 ? cpuCores : "-",
             },
             memory: {
+              used: status === "online" && ramUsed > 0 ? ramUsed : undefined,
               total: ramTotal > 0 ? ramTotal : "-",
             },
             disk: {
+              used: status === "online" && diskUsed > 0 ? diskUsed : undefined,
               total: diskTotal > 0 ? diskTotal : "-",
             },
             os: "Ubuntu 22.04",
@@ -391,8 +415,11 @@ export const infrastructureAPI = {
       return {
         servers: serversData.map((server: any) => {
           const cpuCores = server.cpuCores ? parseInt(server.cpuCores) || 0 : 0;
+          const cpuUsed = server.cpuUsed ? parseFloat(server.cpuUsed) || 0 : 0;
           const ramTotal = parseSizeToGiB(server.ramTotal);
+          const ramUsed = parseSizeToGiB(server.ramUsed);
           const diskTotal = parseSizeToGiB(server.diskTotal);
+          const diskUsed = parseSizeToGiB(server.diskUsed);
           let status: "online" | "offline" | "disabled" = "offline";
           if (server.status === "ONLINE") {
             status = "online";
@@ -401,7 +428,7 @@ export const infrastructureAPI = {
           } else {
             status = "offline";
           }
-          
+
           return {
             id: String(server.id),
             name: server.name,
@@ -413,12 +440,15 @@ export const infrastructureAPI = {
             serverStatus: server.serverStatus,
             clusterStatus: server.clusterStatus,
             cpu: {
+              used: status === "online" && cpuUsed > 0 ? cpuUsed : undefined,
               total: cpuCores > 0 ? cpuCores : "-",
             },
             memory: {
+              used: status === "online" && ramUsed > 0 ? ramUsed : undefined,
               total: ramTotal > 0 ? ramTotal : "-",
             },
             disk: {
+              used: status === "online" && diskUsed > 0 ? diskUsed : undefined,
               total: diskTotal > 0 ? diskTotal : "-",
             },
             os: "Ubuntu 22.04",

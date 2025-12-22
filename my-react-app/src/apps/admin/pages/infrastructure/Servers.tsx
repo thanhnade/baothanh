@@ -656,6 +656,67 @@ export function Servers() {
     }
   };
 
+  // Component hiển thị usage cho resource
+  const ResourceUsageDisplay = ({
+    label,
+    used,
+    total,
+    unit
+  }: {
+    label: string;
+    used?: number;
+    total: number | "-";
+    unit: string;
+  }) => {
+    // Tính toán percentage
+    const getUsagePercent = () => {
+      if (!used || total === "-" || typeof total === "string") return 0;
+      return Math.min(100, Math.max(0, (used / total) * 100));
+    };
+
+    const percent = getUsagePercent();
+
+    // Xác định màu sắc dựa trên usage percentage
+    const getUsageColor = (percent: number) => {
+      if (percent >= 90) return "text-red-600";      // Đỏ: > 90%
+      if (percent >= 70) return "text-yellow-600";   // Vàng: 70-90%
+      return "text-green-600";                       // Xanh: < 70%
+    };
+
+    // Format giá trị
+    const formatValue = (value: number | undefined) => {
+      if (!value) return "0";
+      return value >= 1 ? value.toFixed(1) : value.toFixed(2);
+    };
+
+    const hasUsage = used !== undefined && used !== null;
+
+    return (
+      <div className="space-y-1">
+        <div className="text-muted-foreground text-xs uppercase">{label}</div>
+
+        {/* Hiển thị used/total */}
+        <div className="font-semibold text-sm">
+          {hasUsage ? (
+            <div className="flex items-baseline space-x-1">
+              <span className={getUsageColor(percent)}>{formatValue(used)}</span>
+              <span className="text-muted-foreground">/</span>
+              <span>{total === "-" || typeof total === "string" ? "-" : formatValue(total)}</span>
+              <span className="text-muted-foreground text-xs">{unit}</span>
+            </div>
+          ) : (
+            <div>
+              {total === "-" || typeof total === "string"
+                ? "-"
+                : `${formatValue(total)} ${unit}`
+              }
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Component Server Card với dropdown menu
   const ServerCard = ({ server }: { server: Server }) => {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -815,32 +876,26 @@ export function Servers() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <div className="text-muted-foreground">CPU</div>
-                <div className="font-semibold">
-                  {server.cpu.total === "-" || typeof server.cpu.total === "string" 
-                    ? "-" 
-                    : `${server.cpu.total} cores`}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">RAM</div>
-                <div className="font-semibold">
-                  {server.memory.total === "-" || typeof server.memory.total === "string" 
-                    ? "-" 
-                    : `${server.memory.total} GiB`}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Disk</div>
-                <div className="font-semibold">
-                  {server.disk.total === "-" || typeof server.disk.total === "string" 
-                    ? "-" 
-                    : `${server.disk.total} GiB`}
-                </div>
-              </div>
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <ResourceUsageDisplay
+                label="CPU"
+                used={server.cpu.used}
+                total={server.cpu.total}
+                unit="cores"
+              />
+              <ResourceUsageDisplay
+                label="RAM"
+                used={server.memory.used}
+                total={server.memory.total}
+                unit="GiB"
+              />
+              <ResourceUsageDisplay
+                label="Disk"
+                used={server.disk.used}
+                total={server.disk.total}
+                unit="GiB"
+              />
             </div>
           </div>
         </CardContent>

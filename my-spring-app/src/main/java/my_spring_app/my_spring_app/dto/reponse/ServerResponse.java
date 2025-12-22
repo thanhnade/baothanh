@@ -22,10 +22,13 @@ public class ServerResponse {
     private String clusterStatus; // AVAILABLE, UNAVAILABLE
     private LocalDateTime createdAt;
     
-    // Metrics (optional) - chỉ trả về total, không trả về used
+    // Metrics (optional) - trả về cả total và used
     private String cpuCores;
+    private String cpuUsed;
     private String ramTotal;
+    private String ramUsed;
     private String diskTotal;
+    private String diskUsed;
 }
 
 
