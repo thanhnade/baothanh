@@ -249,9 +249,12 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
                 System.out.println("[INSTALL ANSIBLE] Output: " + pythonResult.substring(0, Math.min(200, pythonResult.length())));
             }
             
-            // Bước 3: Cài đặt Ansible
-            System.out.println("[INSTALL ANSIBLE] Bước 3/4: Cài đặt Ansible...");
-            String ansibleCmd = "sudo pip3 install --upgrade ansible";
+            // Bước 3: Thêm Ansible PPA và cài đặt qua apt
+            System.out.println("[INSTALL ANSIBLE] Bước 3/4: Thêm Ansible PPA và cài đặt...");
+            String addPpaCmd = "sudo apt-add-repository --yes --update ppa:ansible/ansible";
+            executeCommandWithAuth(serverId, addPpaCmd, sudoPassword, 30000);
+
+            String ansibleCmd = "sudo apt install -y ansible";
             String ansibleResult = executeCommandWithAuth(serverId, ansibleCmd, sudoPassword, 60000);
             System.out.println("[INSTALL ANSIBLE] ✓ Đã cài đặt Ansible");
             if (ansibleResult != null && !ansibleResult.trim().isEmpty()) {
